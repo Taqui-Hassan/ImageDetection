@@ -116,13 +116,14 @@ const client = new Client({
             ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' 
             : undefined, 
         args: [
-            '--no-sandbox', 
+            '--no-sandbox',
             '--disable-setuid-sandbox',
-            '--disable-gpu', 
+            '--disable-gpu',
             '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--single-process', // Safe on Linux
-            '--no-zygote'
+            '--disable-accelerated-2d-canvas', // <--- This one is crucial for images
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process' // <--- This prevents the RAM crash
         ] 
     },
     webVersionCache: {
