@@ -1,29 +1,30 @@
-# Use Python 3.9 slim (Bullseye is good for stability)
+# Use Python 3.9 slim (Bullseye)
 FROM python:3.9-slim-bullseye
 
-# 1. Install system dependencies for graphics (but NOT dlib itself)
+# 1. Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     libgl1-mesa-glx \
     libglib2.0-0 \
     wget \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Setup App
 WORKDIR /app
 
-# 3. MAGIC STEP: Download a pre-compiled dlib wheel
-# This skips the compilation step entirely.
-RUN wget https://github.com/davisking/dlib/releases/download/v19.22/dlib-19.22.99-cp39-cp39-linux_x86_64.whl \
-    || wget https://github.com/sachadee/Dlib/raw/master/dlib-19.22.99-cp39-cp39-linux_x86_64.whl \
-    && pip install dlib-19.22.99-cp39-cp39-linux_x86_64.whl \
-    && rm dlib-19.22.99-cp39-cp39-linux_x86_64.whl
+# 3. MAGIC STEP: Clone a repo that DEFINITELY has the wheel and install from local file
+# This is much safer than relying on direct download links that break.
+RUN git clone https://github.com/3b1b/dlib-wheels.git \
+    && pip install dlib-wheels/dlib-19.22.99-cp39-cp39-linux_x86_64.whl \
+    && rm -rf dlib-wheels
 
 # 4. Install other dependencies
 COPY requirements.txt .
-# Remove dlib from requirements.txt so pip doesn't try to reinstall it
+# Remove dlib/face-recognition from requirements.txt to prevent re-compiling
 RUN sed -i '/dlib/d' requirements.txt && \
+    sed -i '/face_recognition/d' requirements.txt && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir face_recognition --no-deps
 
