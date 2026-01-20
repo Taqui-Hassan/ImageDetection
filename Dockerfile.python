@@ -1,23 +1,20 @@
-# 1. Use a base image that ALREADY has dlib + face_recognition installed
-# This is the "Cheat Code" to skip all compilation errors.
+# Use the "Cheat Code" image with pre-installed dlib
 FROM animcogn/face_recognition:cpu
 
-# 2. This image uses Python 3.6/3.8 internally. 
-# We need to install Flask and other deps on top of it.
 WORKDIR /app
 
-# 3. Copy only requirements first
 COPY requirements.txt .
 
-# 4. CRITICAL: Remove 'dlib' and 'face_recognition' from requirements.txt
-# They are already in this image! Installing them again will break it.
+# 1. FORCE install onnxruntime (Missing dependency fix)
+# We install this explicitly because rembg sometimes forgets it on Linux
+RUN pip install --no-cache-dir onnxruntime
+
+# 2. Install other requirements (removing dlib/face_recognition to avoid crash)
 RUN sed -i '/dlib/d' requirements.txt && \
     sed -i '/face_recognition/d' requirements.txt && \
     pip install --no-cache-dir -r requirements.txt
 
-# 5. Copy the rest of the code
 COPY . .
 
-# 6. Start the server (Using port 5000)
-# We use python explicitly because this image might not have gunicorn in path
+# 3. Start the server
 CMD ["gunicorn", "ai_server:app", "--bind", "0.0.0.0:5000", "--timeout", "120"]
