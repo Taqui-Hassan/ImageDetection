@@ -1,0 +1,30 @@
+# Use a lightweight Python base
+FROM python:3.9-slim
+
+# 1. Install system dependencies (including pre-compiled dlib!)
+# We use 'python3-dlib' from Debian to avoid compiling it ourselves
+RUN apt-get update && apt-get install -y \
+    python3-dlib \
+    face-recognition \
+    build-essential \
+    cmake \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Setup App
+WORKDIR /app
+COPY requirements.txt .
+
+# 3. Install other Python deps (Exclude dlib/face_recognition to prevent recompiling)
+# We use --no-deps for face-recognition to keep the system version
+RUN sed -i '/dlib/d' requirements.txt && \
+    sed -i '/face_recognition/d' requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir face_recognition --no-deps
+
+# 4. Copy Code
+COPY . .
+
+# 5. Start
+CMD ["gunicorn", "ai_server:app", "--bind", "0.0.0.0:5000"]
