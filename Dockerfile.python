@@ -1,29 +1,31 @@
-# Use Python 3.9 slim
-FROM python:3.9-slim
+# 1. Use "Bullseye" (Debian 11) - This version HAS the packages we need
+FROM python:3.9-slim-bullseye
 
-# 1. Install ONLY the system libraries dlib needs
-# We do NOT use apt-get for python3-dlib here
+# 2. Install pre-compiled dlib and graphics drivers
+# 'python3-dlib' exists here and installs instantly (0 GB RAM usage)
 RUN apt-get update && apt-get install -y \
+    python3-dlib \
+    face-recognition \
     build-essential \
     cmake \
-    libopenblas-dev \
-    liblapack-dev \
-    libx11-dev \
     libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Setup App
+# 3. Setup App
 WORKDIR /app
 COPY requirements.txt .
 
-# 3. Use --no-cache-dir to save memory during pip install
-# We install dlib specifically with a single thread to avoid memory spikes
-RUN pip install --no-cache-dir cmake && \
-    pip install --no-cache-dir dlib==19.22.1 && \
-    pip install --no-cache-dir face_recognition
+# 4. CRITICAL: Remove 'dlib' and 'face-recognition' from requirements.txt
+# We already installed them via apt-get above. 
+# If we let pip install them again, it will try to compile and CRASH your server.
+RUN sed -i '/dlib/d' requirements.txt && \
+    sed -i '/face_recognition/d' requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir face_recognition --no-deps
 
-# 4. Copy the rest of your code
+# 5. Copy Code
 COPY . .
 
-# 5. Start command
+# 6. Start
 CMD ["gunicorn", "ai_server:app", "--bind", "0.0.0.0:5000", "--timeout", "120"]
