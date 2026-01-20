@@ -1,0 +1,7 @@
+flask
+flask-cors
+face_recognition
+numpy
+rembg
+pillow
+gunicorn

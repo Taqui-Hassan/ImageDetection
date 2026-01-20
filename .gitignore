@@ -1,0 +1,8 @@
+node_modules/
+faceenv/
+venv/
+.venv/
+.wwebjs_auth/
+.wwebjs_auth_safe/
+uploads/
+*.log
