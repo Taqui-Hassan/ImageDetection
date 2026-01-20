@@ -1,26 +1,29 @@
-# 1. Use "Bullseye" (Debian 11) - This version HAS the packages we need
+# Use Python 3.9 slim (Bullseye is good for stability)
 FROM python:3.9-slim-bullseye
 
-# 2. Install pre-compiled dlib and graphics drivers
-# 'python3-dlib' exists here and installs instantly (0 GB RAM usage)
+# 1. Install system dependencies for graphics (but NOT dlib itself)
 RUN apt-get update && apt-get install -y \
-    python3-dlib \
-    face-recognition \
     build-essential \
     cmake \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Setup App
+# 2. Setup App
 WORKDIR /app
-COPY requirements.txt .
 
-# 4. CRITICAL: Remove 'dlib' and 'face-recognition' from requirements.txt
-# We already installed them via apt-get above. 
-# If we let pip install them again, it will try to compile and CRASH your server.
+# 3. MAGIC STEP: Download a pre-compiled dlib wheel
+# This skips the compilation step entirely.
+RUN wget https://github.com/davisking/dlib/releases/download/v19.22/dlib-19.22.99-cp39-cp39-linux_x86_64.whl \
+    || wget https://github.com/sachadee/Dlib/raw/master/dlib-19.22.99-cp39-cp39-linux_x86_64.whl \
+    && pip install dlib-19.22.99-cp39-cp39-linux_x86_64.whl \
+    && rm dlib-19.22.99-cp39-cp39-linux_x86_64.whl
+
+# 4. Install other dependencies
+COPY requirements.txt .
+# Remove dlib from requirements.txt so pip doesn't try to reinstall it
 RUN sed -i '/dlib/d' requirements.txt && \
-    sed -i '/face_recognition/d' requirements.txt && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir face_recognition --no-deps
 
