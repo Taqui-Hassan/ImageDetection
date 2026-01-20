@@ -12,7 +12,7 @@ import os from "os";
 import { promisify } from 'util';
 
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth, MessageMedia } = pkg;
+const { Client, LocalAuth, NoAuth, MessageMedia } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,27 +105,23 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 const client = new Client({
-    authStrategy: new LocalAuth({ 
-        dataPath: SAFE_AUTH_PATH, 
-        restartOnAuthFail: true 
-    }),
+    authStrategy: new NoAuth(), // Now this will definitely work
     puppeteer: { 
         headless: true,
-       
-        executablePath: process.platform === 'win32' 
-            ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' 
-            : undefined, 
+        // Add this line to save RAM on graphics:
+        defaultViewport: { width: 800, height: 600 }, 
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-gpu',
             '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas', // <--- This one is crucial for images
+            '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process' // <--- This prevents the RAM crash
+            '--single-process'
         ] 
     },
+    // ... keep the rest the same
     webVersionCache: {
         type: 'remote',
         remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
