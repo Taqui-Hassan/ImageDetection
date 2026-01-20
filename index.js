@@ -120,6 +120,7 @@ const client = new Client({
             '--disable-setuid-sandbox',
             '--disable-gpu', 
             '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
             '--single-process', // Safe on Linux
             '--no-zygote'
         ] 
