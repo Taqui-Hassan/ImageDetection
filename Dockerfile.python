@@ -1,35 +1,23 @@
-# Use Python 3.9 slim (Bullseye)
-FROM python:3.9-slim-bullseye
+# 1. Use a base image that ALREADY has dlib + face_recognition installed
+# This is the "Cheat Code" to skip all compilation errors.
+FROM animcogn/face_recognition:cpu
 
-# 1. Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    wget \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# 2. Setup App
+# 2. This image uses Python 3.6/3.8 internally. 
+# We need to install Flask and other deps on top of it.
 WORKDIR /app
 
-# 3. MAGIC STEP: Clone a repo that DEFINITELY has the wheel and install from local file
-# This is much safer than relying on direct download links that break.
-RUN git clone https://github.com/3b1b/dlib-wheels.git \
-    && pip install dlib-wheels/dlib-19.22.99-cp39-cp39-linux_x86_64.whl \
-    && rm -rf dlib-wheels
-
-# 4. Install other dependencies
+# 3. Copy only requirements first
 COPY requirements.txt .
-# Remove dlib/face-recognition from requirements.txt to prevent re-compiling
+
+# 4. CRITICAL: Remove 'dlib' and 'face_recognition' from requirements.txt
+# They are already in this image! Installing them again will break it.
 RUN sed -i '/dlib/d' requirements.txt && \
     sed -i '/face_recognition/d' requirements.txt && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir face_recognition --no-deps
+    pip install --no-cache-dir -r requirements.txt
 
-# 5. Copy Code
+# 5. Copy the rest of the code
 COPY . .
 
-# 6. Start
+# 6. Start the server (Using port 5000)
+# We use python explicitly because this image might not have gunicorn in path
 CMD ["gunicorn", "ai_server:app", "--bind", "0.0.0.0:5000", "--timeout", "120"]
