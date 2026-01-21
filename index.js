@@ -4,7 +4,7 @@ import multer from "multer";
 import xlsx from "xlsx";
 import fs from "fs";
 import path from "path";
-import fetch from "node-fetch"; // Used to download images from URL
+import fetch from "node-fetch"; 
 import { fileURLToPath } from "url";
 import FormData from 'form-data';
 import qrcodeTerminal from 'qrcode-terminal';
@@ -21,7 +21,7 @@ app.use(express.json({ limit: '50mb' }));
 // --- CONFIGURATION ---
 const CONFIG = {
     PORT: 8000,
-    PYTHON_SERVICE_URL: 'https://event-ai-service.onrender.com', // Your AI URL
+    PYTHON_SERVICE_URL: 'https://event-ai-service.onrender.com',
 };
 
 // --- DIRECTORIES ---
@@ -37,6 +37,7 @@ if (!fs.existsSync(META_FILE)) fs.writeFileSync(META_FILE, "{}");
 
 // --- WHATSAPP CLIENT ---
 let isWhatsAppReady = false;
+let currentQR = null; // 👈 VARIABLE TO STORE QR FOR FRONTEND
 
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
@@ -59,12 +60,14 @@ const client = new Client({
 });
 
 client.on('qr', qr => {
-    console.log('\n🔥 SCAN THIS QR CODE:\n');
+    console.log('\n🔥 QR RECEIVED (Scan in Browser or Terminal)');
+    currentQR = qr; // 👈 Save QR so frontend can display it
     qrcodeTerminal.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
     isWhatsAppReady = true;
+    currentQR = null; // Clear QR once connected
     console.log(`✅ WHATSAPP CONNECTED! (${client.info.wid.user})`);
 });
 
@@ -91,8 +94,6 @@ async function getMediaFromUrl(url) {
         const contentType = response.headers.get('content-type') || 'image/jpeg';
         const buffer = await response.buffer();
         const base64 = buffer.toString('base64');
-        
-        // Create WhatsApp Media Object
         return new MessageMedia(contentType, base64, "image.jpg");
     } catch (error) {
         console.error("❌ Error downloading image:", error.message);
@@ -102,7 +103,26 @@ async function getMediaFromUrl(url) {
 
 // --- ROUTES ---
 
-// 1. GET GUESTS
+// 1. SYSTEM STATUS (THE NEW ROUTE FOR YOUR DASHBOARD)
+app.get("/system-status", async (req, res) => {
+    let batteryInfo = null;
+    try {
+        if (isWhatsAppReady) {
+            batteryInfo = await client.info.getBatteryStatus();
+        }
+    } catch (e) {
+        // Battery info might fail if phone is sleeping, ignore error
+    }
+
+    res.json({
+        whatsapp: isWhatsAppReady,
+        qr: currentQR, // Send the stored QR code
+        user: isWhatsAppReady ? client.info.wid.user : null,
+        battery: batteryInfo // { battery: 80, plugged: false }
+    });
+});
+
+// 2. GET GUESTS
 app.get("/guests", (req, res) => {
     try {
         if (fs.existsSync(META_FILE)) {
@@ -117,7 +137,7 @@ app.get("/guests", (req, res) => {
     } catch (err) { res.json([]); }
 });
 
-// 2. DELETE GUEST
+// 3. DELETE GUEST
 app.delete("/guests/:name", (req, res) => {
     const nameToDelete = req.params.name;
     try {
@@ -132,7 +152,7 @@ app.delete("/guests/:name", (req, res) => {
 
 const upload = multer({ dest: UPLOADS_DIR });
 
-// 3. AI RECOGNIZE (Scanner)
+// 4. AI RECOGNIZE (Scanner)
 app.post("/recognize-guest", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No image" });
     const originalPath = req.file.path;
@@ -178,7 +198,7 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
     }
 });
 
-// 4. DATABASE IMPORT (Update Local DB)
+// 5. DATABASE IMPORT (Update Local DB)
 app.post("/upload-excel", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error" });
     const tempFilePath = req.file.path;
@@ -210,7 +230,7 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
     }
 });
 
-// 5. BULK BLAST (EXCEL URL MODE) 🚀
+// 6. BULK BLAST (EXCEL URL MODE - The "Goat" Feature) 🚀
 app.post("/send-bulk", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error", message: "No Excel file" });
     const tempFilePath = req.file.path;
@@ -232,7 +252,7 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
             const phone = row.Phone?.toString().trim();
             const seat = row.Seat || row["Seat Number"] || "General";
             
-            // 👇 READ THE IMAGE URL COLUMN (Matches your screenshot)
+            // Read Image URL from Excel
             const imageUrl = row.ImageURL || row["Image URL"] || row.imageurl;
 
             if (name && phone) {
@@ -242,7 +262,7 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
                     
                     const message = `👋 Hello ${name}!\n\n🎟️ Welcome to the event.\n📍 *Your Seat Number is: ${seat}*\n\nPlease proceed to your seat.`;
 
-                    // Check if we have a valid URL
+                    // Smart Download Logic
                     if (imageUrl && imageUrl.startsWith('http')) {
                         console.log(`⬇️ Downloading image for ${name}...`);
                         const media = await getMediaFromUrl(imageUrl);
@@ -251,18 +271,16 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
                             await client.sendMessage(chatId, media, { caption: message });
                             console.log(`✅ Sent URL IMAGE + Text to ${name}`);
                         } else {
-                            // URL failed? Send text only fallback
                             await client.sendMessage(chatId, message);
                             console.log(`⚠️ Image failed, sent Text Only to ${name}`);
                         }
                     } else {
-                        // No URL? Send text only
                         await client.sendMessage(chatId, message);
                         console.log(`✅ Sent Text Only to ${name} (No ImageURL found)`);
                     }
 
                     sentCount++;
-                    await new Promise(r => setTimeout(r, 2000)); // 2s delay to be safe
+                    await new Promise(r => setTimeout(r, 2000)); // Anti-ban delay
 
                 } catch (err) {
                     console.error(`❌ Failed for ${name}:`, err.message);

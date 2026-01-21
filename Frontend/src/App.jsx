@@ -3,7 +3,7 @@ import { Container, CssBaseline, Box, Paper, Typography, Button, TextField, Them
 import FaceCapture from './components/faceCapture';
 import GuestList from './components/guestList';
 import BulkSender from './components/bulkSender'; // Import the new component
-
+import systemStatus from './components/systemStatus';
 // ICONS
 import LockIcon from '@mui/icons-material/Lock';
 import FaceRetouchingNaturalIcon from '@mui/icons-material/FaceRetouchingNatural';
@@ -89,7 +89,7 @@ function App() {
         </Box>
 
         <Container maxWidth="md" sx={{ mt: 5 }}>
-            
+            <systemStatus/>
             {/* --- VIEW 1: MODULE SELECTION MENU --- */}
             {currentModule === "menu" && (
                 <Fade in={true}>
