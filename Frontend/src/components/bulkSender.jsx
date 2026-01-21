@@ -48,7 +48,7 @@ export default function BulkSender({ onBack }) {
                         </Box>
                         <Box display="flex" justifyContent="center" gap={1} flexWrap="wrap">
                             <Typography variant="caption" color="textSecondary" sx={{ mr: 1 }}>COLUMNS:</Typography>
-                            {['Name', 'Phone', 'Seat', 'ImageURL'].map(h => (
+                            {['Name', 'Phone','ImageURL', 'Seat' ].map(h => (
                                 <code key={h} style={{ background: '#0f172a', padding: '2px 8px', borderRadius: '4px', color: '#6366f1', fontSize: '0.75rem', border: '1px solid #334155' }}>{h}</code>
                             ))}
                         </Box>
