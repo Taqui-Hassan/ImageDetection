@@ -6,18 +6,50 @@ export default function FaceCapture() {
   const canvasRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  
+  // 1. New State for Camera Mode ('user' = Front, 'environment' = Back)
+  const [facingMode, setFacingMode] = useState("user");
 
   useEffect(() => {
+    let currentStream = null;
+
     const startCamera = async () => {
+      // Stop any existing stream before starting a new one
+      if (videoRef.current && videoRef.current.srcObject) {
+        const tracks = videoRef.current.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+      }
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        // 2. Use the facingMode state to pick the camera
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: facingMode } 
+        });
+        
+        currentStream = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
       } catch (err) {
         console.error("Camera error:", err);
+        setResult({ error: "Could not access camera. Allow permissions." });
       }
     };
+
     startCamera();
-  }, []);
+
+    // Cleanup: Stop camera when component unmounts or mode changes
+    return () => {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [facingMode]); // Re-run this effect when facingMode changes
+
+  // 3. Toggle Function
+  const toggleCamera = () => {
+    setFacingMode(prev => (prev === "user" ? "environment" : "user"));
+  };
 
   const recognizeFace = async () => {
     if (!videoRef.current) return;
@@ -36,7 +68,6 @@ export default function FaceCapture() {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL}/recognize-guest`, {
           method: "POST",
-          // 👇 FIX 1: ADD THIS HEADER TO BYPASS NGROK WARNING
           headers: {
             "ngrok-skip-browser-warning": "true",
           },
@@ -44,7 +75,7 @@ export default function FaceCapture() {
         });
         
         const data = await res.json();
-        console.log("Recognition Data:", data); // Debugging log
+        console.log("Recognition Data:", data);
         setResult(data);
       } catch (err) {
         console.error(err);
@@ -57,7 +88,32 @@ export default function FaceCapture() {
 
   return (
     <Box textAlign="center" display="flex" flexDirection="column" alignItems="center">
-      <video ref={videoRef} autoPlay style={{ width: 400, borderRadius: "8px", border: "2px solid #1976d2" }} />
+      <Box position="relative" display="inline-block">
+        <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline // Important for iOS to not go fullscreen
+            style={{ width: "100%", maxWidth: "400px", borderRadius: "8px", border: "2px solid #1976d2" }} 
+        />
+        
+        {/* SWITCH CAMERA BUTTON (Overlay on top right of video) */}
+        <Button 
+            variant="contained" 
+            color="secondary" 
+            size="small"
+            onClick={toggleCamera}
+            sx={{ 
+                position: "absolute", 
+                top: 10, 
+                right: 10, 
+                opacity: 0.9,
+                fontWeight: "bold"
+            }}
+        >
+            🔄 Switch
+        </Button>
+      </Box>
+
       <canvas ref={canvasRef} style={{ display: "none" }} />
       
       <Box mt={3}>
@@ -68,19 +124,16 @@ export default function FaceCapture() {
 
       <Box mt={3} width="100%" sx={{ minHeight: '60px' }}>
         
-        {/* 👇 FIX 2: LOWERCASE "matched" TO MATCH BACKEND */}
         {result?.status === "matched" && result?.name && (
           <Alert severity="success" variant="filled">
             Welcome, <strong>{result.name}</strong>! WhatsApp message sent.
           </Alert>
         )}
 
-        {/* 👇 FIX 2: LOWERCASE "unknown" TO MATCH BACKEND */}
         {result?.status === "unknown" && (
           <Alert severity="warning" variant="filled">Guest Not Found.</Alert>
         )}
 
-        {/* ERROR CASE */}
         {result?.error && (
           <Alert severity="error">{result.error}</Alert>
         )}
