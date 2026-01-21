@@ -36,6 +36,7 @@ export default function GuestList() {
                         <TableRow>
                             <TableCell sx={{ bgcolor: '#f5f5f5' }}><strong>Name</strong></TableCell>
                             <TableCell sx={{ bgcolor: '#f5f5f5' }}><strong>Phone Number</strong></TableCell>
+                            <TableCell sx={{ bgcolor: '#f5f5f5' }}><strong>Seat</strong></TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -44,6 +45,7 @@ export default function GuestList() {
                             <TableRow key={index} hover>
                                 <TableCell>{guest.name}</TableCell>
                                 <TableCell>{guest.phone}</TableCell>
+                                <TableCell>{guest.seat}</TableCell>
                             </TableRow>
                         ))}
                         {guests.length === 0 && (
