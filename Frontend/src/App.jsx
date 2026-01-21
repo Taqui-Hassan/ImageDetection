@@ -89,8 +89,8 @@ function App() {
         </Box>
 
         <Container maxWidth="md" sx={{ mt: 5 }}>
-            <systemStatus/>
             {/* --- VIEW 1: MODULE SELECTION MENU --- */}
+            {<systemStatus/>}
             {currentModule === "menu" && (
                 <Fade in={true}>
                     <Box>
