@@ -11,9 +11,8 @@ import qrcodeTerminal from 'qrcode-terminal';
 import os from "os";
 import { promisify } from 'util';
 
-// --- CRITICAL FIX: Correct Import for whatsapp-web.js ---
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth, NoAuth, MessageMedia } = pkg;
+const { Client, LocalAuth, MessageMedia } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,32 +26,38 @@ const CONFIG = {
     PORT: process.env.PORT || 8000,
     PYTHON_SERVICE_URL: process.env.PYTHON_URL || 'http://localhost:5000',
     BG_SERVICE_URL: process.env.BG_URL || 'http://localhost:5000',
-    MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
-    REQUEST_TIMEOUT: 60000, // Increased to 60s for stability
+    MAX_FILE_SIZE: 10 * 1024 * 1024,
+    REQUEST_TIMEOUT: 60000,
     DEFAULT_COUNTRY_CODE: '91',
-    MAX_CONCURRENT_REQUESTS: 1 // Reduced to 1 to prevent memory crashes
+    IS_RENDER: process.env.RENDER === 'true' // Detect if running on Render
 };
 
 // --- DIRECTORY SETUP ---
 const UPLOADS_DIR = path.resolve(__dirname, "uploads");
 const FACE_DB = path.resolve(__dirname, "face_service", "faces");
 const META_FILE = path.join(FACE_DB, "meta.json");
-const SAFE_AUTH_PATH = path.join(os.homedir(), '.wwebjs_auth_safe');
-const LOG_FILE = path.join(__dirname, 'app.log');
 
-// Create directories
-[UPLOADS_DIR, FACE_DB].forEach(dir => {
+// CRITICAL: On Render, use /opt/render/project/src/.wwebjs_auth
+// This directory persists across deploys (if you use persistent disk)
+const SAFE_AUTH_PATH = CONFIG.IS_RENDER 
+    ? path.join(__dirname, '.wwebjs_auth')  // Within project on Render
+    : path.join(os.homedir(), '.wwebjs_auth_safe'); // Local development
+
+console.log(`📂 Auth Storage: ${SAFE_AUTH_PATH}`);
+console.log(`📦 Environment: ${CONFIG.IS_RENDER ? 'Render' : 'Local'}`);
+
+[UPLOADS_DIR, FACE_DB, SAFE_AUTH_PATH].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 if (!fs.existsSync(META_FILE)) fs.writeFileSync(META_FILE, "{}");
 
-// --- LOGGING UTILITY ---
+// --- LOGGING ---
 function log(level, message, data = {}) {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] [${level}] ${message} ${JSON.stringify(data)}`);
 }
 
-// --- FILE CLEANUP UTILITY ---
+// --- FILE CLEANUP ---
 async function safeDeleteFile(filePath) {
     try {
         if (fs.existsSync(filePath)) {
@@ -89,18 +94,29 @@ function sanitizePhoneNumber(phone, countryCode = CONFIG.DEFAULT_COUNTRY_CODE) {
     return cleaned;
 }
 
-// --- WHATSAPP CLIENT SETUP (CRASH PROOF VERSION) ---
+// --- WHATSAPP CLIENT SETUP ---
 let clientReady = false;
+let clientInitializing = false;
+let qrCodeUrl = null; // Store QR for web display
+
+// FIX: On Render free tier without persistent disk, you'll need to re-scan QR on each deploy
+// OPTION 1: Use persistent disk (recommended)
+// OPTION 2: Store session in external database (advanced)
+// OPTION 3: Accept re-scanning QR code on each restart (current setup)
 
 const client = new Client({
-    // FIX 1: Use NoAuth to prevent saving session files (Saves RAM/Disk)
-    authStrategy: new NoAuth(),
-
+    authStrategy: new LocalAuth({ 
+        dataPath: SAFE_AUTH_PATH,
+        clientId: 'whatsapp-event-bot'
+    }),
     puppeteer: {
         headless: true,
-        // FIX 2: Small viewport to save RAM
-        defaultViewport: { width: 800, height: 600 },
-        // FIX 3: Critical flags for Render Free Tier
+        // Render-specific Chrome path (Render uses Chromium buildpack)
+        executablePath: CONFIG.IS_RENDER 
+            ? '/usr/bin/chromium-browser'  // Render's Chromium path
+            : (process.platform === 'win32' 
+                ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+                : undefined),
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -109,7 +125,12 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process' 
+            '--single-process',
+            '--disable-extensions',
+            // Render-specific optimizations
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding'
         ]
     },
     webVersionCache: {
@@ -118,76 +139,114 @@ const client = new Client({
     }
 });
 
-// Event Handlers
+// QR Code Handler
 client.on('qr', qr => {
+    qrCodeUrl = qr;
     log('INFO', 'QR Code generated');
+    console.log('\n🔥 SCAN THIS QR CODE WITH WHATSAPP:\n');
     qrcodeTerminal.generate(qr, { small: true });
+    console.log('\n📱 Or visit: GET /qr endpoint\n');
 });
 
 client.on('ready', () => {
     clientReady = true;
+    clientInitializing = false;
+    qrCodeUrl = null;
     log('INFO', `WhatsApp connected as ${client.info.wid.user}`);
-    console.log(`🔥 CONNECTED as ${client.info.wid.user}`);
+    console.log(`✅ WHATSAPP READY: ${client.info.wid.user}`);
 });
 
-client.on('authenticated', () => log('INFO', 'WhatsApp authenticated'));
+client.on('authenticated', () => {
+    log('INFO', 'WhatsApp authenticated');
+    console.log('✅ WhatsApp Authenticated Successfully');
+});
 
 client.on('auth_failure', (msg) => {
-    log('ERROR', 'WhatsApp auth failure', { message: msg });
+    log('ERROR', 'Auth failure', { message: msg });
     clientReady = false;
+    clientInitializing = false;
+    qrCodeUrl = null;
 });
 
 client.on('disconnected', (reason) => {
-    log('WARN', 'WhatsApp disconnected', { reason });
+    log('WARN', 'Disconnected', { reason });
     clientReady = false;
-    // On free tier, we don't auto-reconnect to avoid death loops. 
-    // You must restart service manually if it dies.
+    
+    // Only auto-reconnect on unexpected disconnections
+    if (reason !== 'LOGOUT' && !CONFIG.IS_RENDER) {
+        log('INFO', 'Auto-reconnecting in 5s...');
+        setTimeout(() => {
+            if (!clientInitializing) {
+                clientInitializing = true;
+                client.initialize();
+            }
+        }, 5000);
+    }
 });
 
-log('INFO', 'Initializing WhatsApp client...');
+// Keep connection alive
+client.on('loading_screen', async () => {
+    try {
+        await client.pupPage?.evaluate(() => {
+            if (window.WWebJS) {
+                window.injectToFunction({ 
+                    module: 'WAWebLid1X1MigrationGating', 
+                    function: 'Lid1X1MigrationUtils.isLidMigrated' 
+                }, () => false);
+            }
+        });
+    } catch(e) {}
+});
+
+// Initialize
+log('INFO', 'Initializing WhatsApp...');
+clientInitializing = true;
 client.initialize().catch(err => {
-    log('ERROR', 'Client initialization failed', { error: err.message });
+    log('ERROR', 'Init failed', { error: err.message });
+    clientInitializing = false;
 });
 
-// --- BACKGROUND REMOVAL HELPER ---
+// --- BACKGROUND REMOVAL ---
 async function addEventBackground(inputPath) {
     const processedPath = inputPath.replace(/\.(jpg|png)$/i, '_branded.jpg');
     try {
-        log('INFO', 'Sending to BG Service...');
         const form = new FormData();
         form.append('image', fs.createReadStream(inputPath));
 
         const response = await fetch(`${CONFIG.BG_SERVICE_URL}/composite`, {
             method: 'POST',
-            body: form
+            body: form,
+            timeout: 30000
         });
 
-        if (!response.ok) throw new Error(`BG Service returned ${response.status}`);
+        if (!response.ok) throw new Error(`BG Service error: ${response.status}`);
 
         const buffer = await response.arrayBuffer();
         fs.writeFileSync(processedPath, Buffer.from(buffer));
         return processedPath;
     } catch (err) {
-        log('ERROR', 'Background processing failed, using original', { error: err.message });
+        log('WARN', 'Background failed, using original', { error: err.message });
         return inputPath;
     }
 }
 
-// --- SEND WHATSAPP PHOTO ---
+// --- SEND WHATSAPP ---
 async function sendWhatsAppPhoto(name, phone, imagePath) {
-    if (!clientReady) return false;
+    if (!clientReady) {
+        log('WARN', 'WhatsApp not ready');
+        return false;
+    }
 
     try {
         const sanitized = sanitizePhoneNumber(phone);
         if (!sanitized) return false;
 
         const targetId = `${sanitized}@c.us`;
-        // Delay to prevent spam blocks
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(r => setTimeout(r, 1000));
 
         const numberInfo = await client.getNumberId(targetId);
         if (!numberInfo) {
-            log('WARN', 'Number not on WhatsApp', { phone: sanitized });
+            log('WARN', 'Number not found', { phone: sanitized });
             return false;
         }
 
@@ -199,21 +258,34 @@ async function sendWhatsAppPhoto(name, phone, imagePath) {
             sendSeen: false
         });
 
-        log('INFO', 'Photo sent successfully', { name });
+        log('INFO', 'Photo sent', { name, phone: sanitized });
         return true;
     } catch (err) {
-        log('ERROR', 'WhatsApp send failed', { error: err.message });
+        log('ERROR', 'Send failed', { name, error: err.message });
         return false;
     }
 }
 
-// --- RECOGNITION ROUTE ---
+// --- ROUTES ---
+
+// QR Code endpoint (for web display)
+app.get('/qr', (req, res) => {
+    if (clientReady) {
+        res.json({ status: 'connected', message: 'WhatsApp already connected' });
+    } else if (qrCodeUrl) {
+        res.json({ status: 'qr_ready', qr: qrCodeUrl });
+    } else {
+        res.json({ status: 'initializing', message: 'Waiting for QR code...' });
+    }
+});
+
+// Recognition
 app.post("/recognize-guest", uploadConfig.single("image"), async (req, res) => {
     if (!clientReady) {
-        return res.status(503).json({ status: "error", message: "WhatsApp not connected." });
+        return res.status(503).json({ status: "error", message: "WhatsApp not connected" });
     }
     if (!req.file) {
-        return res.status(400).json({ status: "error", message: "No image uploaded" });
+        return res.status(400).json({ status: "error", message: "No image" });
     }
 
     const tempFilePath = path.resolve(req.file.path);
@@ -222,59 +294,47 @@ app.post("/recognize-guest", uploadConfig.single("image"), async (req, res) => {
         const form = new FormData();
         form.append('image', fs.createReadStream(tempFilePath));
 
-        // 1. Recognize Face
         const pyRes = await fetch(`${CONFIG.PYTHON_SERVICE_URL}/recognize`, {
             method: 'POST',
             body: form
         });
 
-        if (!pyRes.ok) throw new Error(`Python service error: ${pyRes.status}`);
+        if (!pyRes.ok) throw new Error(`Recognition error: ${pyRes.status}`);
         const data = await pyRes.json();
-
-        log('INFO', 'Recognition result', data);
+        log('INFO', 'Recognition', data);
 
         if (data.match === true && data.phone) {
-            // 2. Select Image (Stored or Captured)
             const storedImagePath = path.join(FACE_DB, data.name, `${data.name}.jpg`);
-            let rawImage = tempFilePath;
+            let rawImage = fs.existsSync(storedImagePath) ? storedImagePath : tempFilePath;
             
-            if (fs.existsSync(storedImagePath)) {
-                rawImage = storedImagePath;
-            }
-
-            // 3. Add Background
             const finalImage = await addEventBackground(rawImage);
+            
+            // Send async (don't block response)
+            sendWhatsAppPhoto(data.name, data.phone, finalImage);
 
-            // 4. Send Message
-            sendWhatsAppPhoto(data.name, data.phone, finalImage); // Don't await to speed up response
-
-            res.json({ status: "matched", name: data.name, phone: data.phone });
+            res.json({ status: "matched", name: data.name });
         } else {
-            res.json({ status: "unknown", message: "Guest not recognized" });
+            res.json({ status: "unknown" });
         }
-
     } catch (err) {
         log('ERROR', 'Process failed', { error: err.message });
-        res.status(500).json({ status: "error", message: "Processing failed" });
+        res.status(500).json({ status: "error", message: err.message });
     } finally {
-        // Cleanup temp file
-        setTimeout(() => safeDeleteFile(tempFilePath), 5000);
+        setTimeout(() => safeDeleteFile(tempFilePath), 3000);
     }
 });
 
-// --- ENROLLMENT ROUTE ---
+// Enrollment
 app.post("/upload-excel", uploadConfig.single("file"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ status: "error", message: "No file uploaded" });
+    if (!req.file) return res.status(400).json({ error: "No file" });
 
     const tempFilePath = req.file.path;
     try {
         const workbook = xlsx.readFile(tempFilePath);
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = xlsx.utils.sheet_to_json(sheet);
+        const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
         
         let meta = JSON.parse(fs.readFileSync(META_FILE));
-        let enrolled = 0;
-        let failed = 0;
+        let enrolled = 0, failed = 0;
 
         for (const row of rows) {
             try {
@@ -297,28 +357,52 @@ app.post("/upload-excel", uploadConfig.single("file"), async (req, res) => {
                 
                 meta[name] = sanitized;
                 enrolled++;
+                log('INFO', 'Enrolled', { name });
             } catch (e) { failed++; }
         }
         
         fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
         res.json({ status: "success", enrolled, failed });
-        
     } catch (err) {
-        res.status(500).json({ status: "error", message: "Excel error" });
+        res.status(500).json({ error: err.message });
     } finally {
         safeDeleteFile(tempFilePath);
     }
 });
 
+// Health check
 app.get("/health", (req, res) => {
-    res.json({ status: "ok", whatsapp: clientReady ? "connected" : "disconnected" });
+    res.json({ 
+        status: "ok", 
+        whatsapp: clientReady ? "connected" : (qrCodeUrl ? "qr_pending" : "initializing"),
+        environment: CONFIG.IS_RENDER ? "render" : "local"
+    });
 });
 
-const server = app.listen(CONFIG.PORT, () => {
-    console.log(`🚀 Node Backend running on ${CONFIG.PORT}`);
+// Root
+app.get("/", (req, res) => {
+    res.json({ 
+        service: "WhatsApp Event Bot",
+        status: clientReady ? "✅ Connected" : "⏳ Waiting for QR scan",
+        endpoints: {
+            qr: "GET /qr",
+            health: "GET /health",
+            recognize: "POST /recognize-guest",
+            enroll: "POST /upload-excel"
+        }
+    });
 });
 
-process.on('SIGINT', () => {
-    server.close();
+const server = app.listen(CONFIG.PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${CONFIG.PORT}`);
+    console.log(`📱 Environment: ${CONFIG.IS_RENDER ? 'Render' : 'Local'}`);
+    console.log(`📂 Auth path: ${SAFE_AUTH_PATH}`);
+});
+
+process.on('SIGINT', async () => {
+    console.log('Shutting down...');
+    try {
+        await client.destroy();
+    } catch (e) {}
     process.exit(0);
-});//
+});
