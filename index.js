@@ -46,6 +46,42 @@ const SAFE_AUTH_PATH = CONFIG.IS_RENDER
 console.log(`📂 Auth Storage: ${SAFE_AUTH_PATH}`);
 console.log(`📦 Environment: ${CONFIG.IS_RENDER ? 'Render' : 'Local'}`);
 
+// Clean Chrome lock files on startup (prevents "profile in use" errors)
+function cleanChromeLocks() {
+    try {
+        const lockFiles = [
+            path.join(SAFE_AUTH_PATH, 'SingletonLock'),
+            path.join(SAFE_AUTH_PATH, 'SingletonSocket'),
+            path.join(SAFE_AUTH_PATH, 'SingletonCookie')
+        ];
+        
+        lockFiles.forEach(file => {
+            if (fs.existsSync(file)) {
+                fs.unlinkSync(file);
+                log('INFO', 'Removed lock file', { file });
+            }
+        });
+        
+        // Also clean session lock files
+        if (fs.existsSync(SAFE_AUTH_PATH)) {
+            const files = fs.readdirSync(SAFE_AUTH_PATH);
+            files.forEach(file => {
+                if (file.includes('Singleton')) {
+                    const fullPath = path.join(SAFE_AUTH_PATH, file);
+                    try {
+                        fs.unlinkSync(fullPath);
+                        log('INFO', 'Cleaned session lock', { file });
+                    } catch (e) {}
+                }
+            });
+        }
+    } catch (err) {
+        log('WARN', 'Lock cleanup failed (non-critical)', { error: err.message });
+    }
+}
+
+cleanChromeLocks();
+
 [UPLOADS_DIR, FACE_DB, SAFE_AUTH_PATH].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
