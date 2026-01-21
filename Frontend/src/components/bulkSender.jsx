@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Box, Paper, Typography, Button, LinearProgress, Alert, Fade } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import TerminalIcon from '@mui/icons-material/Terminal';
+import FolderSpecialIcon from '@mui/icons-material/FolderSpecial';
 
 export default function BulkSender({ onBack }) {
     const [file, setFile] = useState(null);
@@ -37,19 +37,21 @@ export default function BulkSender({ onBack }) {
             <Box>
                 <Button onClick={onBack} sx={{ mb: 2, color: '#94a3b8' }}>&larr; RETURN TO MODULES</Button>
                 
-                <Paper sx={{ p: 4, bgcolor: '#0f172a', border: '1px solid #334155', position: 'relative', overflow: 'hidden' }}>
+                <Paper sx={{ p: 4, bgcolor: '#0f172a', border: '1px solid #334155' }}>
                     <Box display="flex" alignItems="center" gap={2} mb={3}>
-                        <Box p={1} bgcolor="rgba(16, 185, 129, 0.1)" borderRadius="50%" color="#10b981"><TerminalIcon /></Box>
+                        <Box p={1} bgcolor="rgba(16, 185, 129, 0.1)" borderRadius="50%" color="#10b981"><FolderSpecialIcon /></Box>
                         <Box>
-                            <Typography variant="h6" color="white">DIRECT BROADCAST PROTOCOL</Typography>
-                            <Typography variant="body2" color="textSecondary">Mass messaging for non-biometric guests.</Typography>
+                            <Typography variant="h6" color="white">SMART VIP BROADCAST</Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                Sends "Name.jpg" from your <strong>vip_images</strong> folder if found.
+                            </Typography>
                         </Box>
                     </Box>
 
                     {/* UPLOAD AREA */}
                     <Box sx={{ border: '2px dashed #334155', borderRadius: 2, p: 4, textAlign: 'center', mb: 3, bgcolor: '#1e293b' }}>
                         <Button component="label" startIcon={<UploadFileIcon />} sx={{ color: '#fff', fontSize: '1.1rem' }}>
-                            {file ? file.name : "SELECT TARGET LIST (.xlsx)"}
+                            {file ? file.name : "SELECT EXCEL LIST"}
                             <input type="file" hidden accept=".xlsx, .xls" onChange={(e) => setFile(e.target.files[0])} />
                         </Button>
                     </Box>
@@ -65,22 +67,16 @@ export default function BulkSender({ onBack }) {
                             '&:disabled': { bgcolor: '#334155', color: '#64748b' }
                         }}
                     >
-                        {loading ? "TRANSMITTING..." : "INITIATE BROADCAST"}
+                        {loading ? "START SMART SENDING" : "INITIATE BROADCAST"}
                     </Button>
 
-                    {/* REPORT CARD */}
                     {report && (
                         <Box mt={3}>
-                            {report.status === 'success' ? (
-                                <Alert severity="success" variant="outlined" sx={{ color: '#10b981', borderColor: '#10b981' }}>
-                                    <strong>MISSION COMPLETE</strong><br/>
-                                    Targeted: {report.total}<br/>
-                                    Delivered: {report.sent}<br/>
-                                    Failed: {report.failed}
-                                </Alert>
-                            ) : (
-                                <Alert severity="error" variant="outlined">{report.message || "Operation Failed"}</Alert>
-                            )}
+                            <Alert severity={report.status === 'success' ? "success" : "error"} variant="outlined">
+                                {report.status === 'success' 
+                                    ? `DONE: Sent ${report.sent}/${report.total} messages.` 
+                                    : report.message}
+                            </Alert>
                         </Box>
                     )}
                 </Paper>

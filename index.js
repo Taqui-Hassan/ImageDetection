@@ -4,7 +4,7 @@ import multer from "multer";
 import xlsx from "xlsx";
 import fs from "fs";
 import path from "path";
-import fetch from "node-fetch";
+import fetch from "node-fetch"; // Used to download images from URL
 import { fileURLToPath } from "url";
 import FormData from 'form-data';
 import qrcodeTerminal from 'qrcode-terminal';
@@ -21,8 +21,7 @@ app.use(express.json({ limit: '50mb' }));
 // --- CONFIGURATION ---
 const CONFIG = {
     PORT: 8000,
-    PYTHON_SERVICE_URL: 'https://event-ai-service.onrender.com',
-    MAX_FILE_SIZE: 50 * 1024 * 1024
+    PYTHON_SERVICE_URL: 'https://event-ai-service.onrender.com', // Your AI URL
 };
 
 // --- DIRECTORIES ---
@@ -53,7 +52,6 @@ const client = new Client({
             '--disable-gpu'
         ]
     },
-    // Locking to stable version to prevent bugs
     webVersionCache: {
         type: 'remote',
         remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
@@ -77,26 +75,35 @@ client.on('disconnected', () => {
 
 client.initialize();
 
+// --- HELPER: Format Phone ---
 function formatPhoneNumber(phone) {
     let cleaned = phone.toString().replace(/\D/g, '');
     if (cleaned.length === 10) cleaned = '91' + cleaned;
     return cleaned;
 }
 
+// --- HELPER: Download Image from URL ---
+async function getMediaFromUrl(url) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+        
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        const buffer = await response.buffer();
+        const base64 = buffer.toString('base64');
+        
+        // Create WhatsApp Media Object
+        return new MessageMedia(contentType, base64, "image.jpg");
+    } catch (error) {
+        console.error("❌ Error downloading image:", error.message);
+        return null;
+    }
+}
+
 // --- ROUTES ---
 
-// 1. GET GUESTS (SECURED)
+// 1. GET GUESTS
 app.get("/guests", (req, res) => {
-    // Check for password header from frontend
-    const adminPassword = req.headers['x-admin-password'];
-    
-    // If accessing from browser directly, we might not have headers, 
-    // but the frontend GuestList.jsx sends "list2024" (or whatever you set).
-    // If you want strict security, uncomment the next 3 lines:
-    // if (adminPassword && adminPassword !== "list2024") {
-    //    return res.status(403).json({ error: "Wrong Password" });
-    // }
-
     try {
         if (fs.existsSync(META_FILE)) {
             const meta = JSON.parse(fs.readFileSync(META_FILE));
@@ -106,12 +113,8 @@ app.get("/guests", (req, res) => {
                 seat: meta[name].seat || "N/A"
             }));
             res.json(guests);
-        } else {
-            res.json([]);
-        }
-    } catch (err) {
-        res.json([]);
-    }
+        } else { res.json([]); }
+    } catch (err) { res.json([]); }
 });
 
 // 2. DELETE GUEST
@@ -122,55 +125,35 @@ app.delete("/guests/:name", (req, res) => {
         if (meta[nameToDelete]) {
             delete meta[nameToDelete];
             fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
-            console.log(`🗑️ Deleted guest: ${nameToDelete}`);
             res.json({ status: "success" });
-        } else {
-            res.status(404).json({ error: "Guest not found" });
-        }
-    } catch (err) {
-        res.status(500).json({ error: "Could not delete" });
-    }
+        } else { res.status(404).json({ error: "Guest not found" }); }
+    } catch (err) { res.status(500).json({ error: "Could not delete" }); }
 });
 
 const upload = multer({ dest: UPLOADS_DIR });
 
-// 3. AI RECOGNIZE & SEND (The Scanner)
+// 3. AI RECOGNIZE (Scanner)
 app.post("/recognize-guest", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No image" });
-    
-    // Rename to .jpg so WhatsApp recognizes it as an image
     const originalPath = req.file.path;
     const filePath = originalPath + '.jpg';
     fs.renameSync(originalPath, filePath);
 
     try {
-        if (!isWhatsAppReady) {
-            return res.status(503).json({ error: "WhatsApp starting..." });
-        }
+        if (!isWhatsAppReady) return res.status(503).json({ error: "WhatsApp starting..." });
 
         const form = new FormData();
         form.append('image', fs.createReadStream(filePath));
 
-        console.log("📤 Sending to AI...");
-        const pyRes = await fetch(`${CONFIG.PYTHON_SERVICE_URL}/recognize`, {
-            method: 'POST',
-            body: form
-        });
-
+        const pyRes = await fetch(`${CONFIG.PYTHON_SERVICE_URL}/recognize`, { method: 'POST', body: form });
         const data = await pyRes.json();
-        console.log("🤖 AI Result:", data);
 
         if (data.match && data.name) {
             const meta = JSON.parse(fs.readFileSync(META_FILE));
-            
-            // Case-Insensitive Lookup (Matches "taqui" to "Taqui")
             const foundName = Object.keys(meta).find(key => key.toLowerCase() === data.name.toLowerCase());
             const guestData = foundName ? meta[foundName] : null;
 
-            if (!guestData || !guestData.phone) {
-                console.log(`⚠️ Match found for '${data.name}', but not in Excel list.`);
-                return res.json({ status: "matched", name: data.name, warning: "No phone found in Excel" });
-            }
+            if (!guestData || !guestData.phone) return res.json({ status: "matched", name: data.name, warning: "No phone found" });
 
             const cleanPhone = formatPhoneNumber(guestData.phone);
             const seatNumber = guestData.seat || "Assigned on arrival";
@@ -181,19 +164,14 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
             try {
                 const media = MessageMedia.fromFilePath(filePath);
                 await client.sendMessage(chatId, media, { caption });
-                
-                console.log(`✅ Sent Seat ${seatNumber} to ${foundName}`);
                 res.json({ status: "matched", name: foundName, phone: cleanPhone, seat: seatNumber, messageSent: true });
-
             } catch (waErr) {
-                console.error("❌ Send Failed:", waErr.message);
                 res.json({ status: "matched", name: foundName, error: "WhatsApp failed" });
             }
         } else {
             res.json({ status: "unknown" });
         }
     } catch (err) {
-        console.error("💥 Error:", err.message);
         res.status(500).json({ error: err.message });
     } finally {
         try { fs.unlinkSync(filePath); } catch (e) { }
@@ -215,19 +193,15 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
         for (const row of rows) {
             const name = row.Name?.toString().trim();
             const phone = row.Phone?.toString().trim();
-            const seat = row.Seat || row["Seat Number"] || row["SeatNo"] || "General";
+            const seat = row.Seat || row["Seat Number"] || "General";
 
             if (name && phone) {
-                meta[name] = {
-                    phone: formatPhoneNumber(phone),
-                    seat: seat.toString()
-                };
+                meta[name] = { phone: formatPhoneNumber(phone), seat: seat.toString() };
                 enrolled++;
             }
         }
         
         fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
-        console.log(`📊 Enrolled ${enrolled} guests with seats.`);
         res.json({ status: "success", enrolled });
     } catch (err) {
         res.status(500).json({ status: "error", message: err.message });
@@ -236,9 +210,9 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
     }
 });
 
-// 5. BULK MESSAGE BLAST (Direct Broadcast)
+// 5. BULK BLAST (EXCEL URL MODE) 🚀
 app.post("/send-bulk", upload.single("file"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ status: "error", message: "No file uploaded" });
+    if (!req.file) return res.status(400).json({ status: "error", message: "No Excel file" });
     const tempFilePath = req.file.path;
 
     try {
@@ -251,12 +225,15 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
         let sentCount = 0;
         let errors = [];
 
-        console.log(`🚀 Starting Bulk Blast for ${rows.length} users...`);
+        console.log(`🚀 Starting Image URL Blast for ${rows.length} users...`);
 
         for (const row of rows) {
             const name = row.Name?.toString().trim();
             const phone = row.Phone?.toString().trim();
-            const seat = row.Seat || row["Seat Number"] || row["SeatNo"] || "General";
+            const seat = row.Seat || row["Seat Number"] || "General";
+            
+            // 👇 READ THE IMAGE URL COLUMN (Matches your screenshot)
+            const imageUrl = row.ImageURL || row["Image URL"] || row.imageurl;
 
             if (name && phone) {
                 try {
@@ -265,12 +242,27 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
                     
                     const message = `👋 Hello ${name}!\n\n🎟️ Welcome to the event.\n📍 *Your Seat Number is: ${seat}*\n\nPlease proceed to your seat.`;
 
-                    await client.sendMessage(chatId, message);
-                    console.log(`✅ Sent to ${name} (${cleanPhone})`);
+                    // Check if we have a valid URL
+                    if (imageUrl && imageUrl.startsWith('http')) {
+                        console.log(`⬇️ Downloading image for ${name}...`);
+                        const media = await getMediaFromUrl(imageUrl);
+                        
+                        if (media) {
+                            await client.sendMessage(chatId, media, { caption: message });
+                            console.log(`✅ Sent URL IMAGE + Text to ${name}`);
+                        } else {
+                            // URL failed? Send text only fallback
+                            await client.sendMessage(chatId, message);
+                            console.log(`⚠️ Image failed, sent Text Only to ${name}`);
+                        }
+                    } else {
+                        // No URL? Send text only
+                        await client.sendMessage(chatId, message);
+                        console.log(`✅ Sent Text Only to ${name} (No ImageURL found)`);
+                    }
+
                     sentCount++;
-                    
-                    // 1 second delay to avoid spam detection
-                    await new Promise(r => setTimeout(r, 1000)); 
+                    await new Promise(r => setTimeout(r, 2000)); // 2s delay to be safe
 
                 } catch (err) {
                     console.error(`❌ Failed for ${name}:`, err.message);
@@ -279,12 +271,7 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
             }
         }
 
-        res.json({ 
-            status: "success", 
-            total: rows.length, 
-            sent: sentCount, 
-            failed: errors.length 
-        });
+        res.json({ status: "success", total: rows.length, sent: sentCount, failed: errors.length });
 
     } catch (err) {
         console.error("Bulk Error:", err);
