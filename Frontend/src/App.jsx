@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Container, CssBaseline, Box, Paper, Typography, Button, TextField, ThemeProvider, createTheme, Fade, Grid } from '@mui/material';
 import FaceCapture from './components/faceCapture';
 import GuestList from './components/guestList';
-import BulkSender from './components/bulkSender'; // Import the new component
-import systemStatus from './components/systemStatus';
+import BulkSender from './components/bulkSender'; 
+
+import SystemStatus from './components/systemStatus'; 
+
 // ICONS
 import LockIcon from '@mui/icons-material/Lock';
 import FaceRetouchingNaturalIcon from '@mui/icons-material/FaceRetouchingNatural';
@@ -31,7 +33,7 @@ const darkTheme = createTheme({
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
-  const [currentModule, setCurrentModule] = useState("menu"); // 'menu', 'scanner', 'bulk'
+  const [currentModule, setCurrentModule] = useState("menu"); 
   
   // SHARED STATE FOR SCANNER MODULE
   const [excelFile, setExcelFile] = useState(null);
@@ -89,7 +91,10 @@ function App() {
         </Box>
 
         <Container maxWidth="md" sx={{ mt: 5 }}>
-            {<systemStatus/>}
+            
+            {/* 👇 FIX 2: Use Capitalized Tag */}
+            <SystemStatus />
+
             {/* --- VIEW 1: MODULE SELECTION MENU --- */}
             {currentModule === "menu" && (
                 <Fade in={true}>
