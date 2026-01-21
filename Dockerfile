@@ -1,25 +1,39 @@
-# Use Node.js base image
-FROM node:18-slim
+# Use Node.js 20 base image
+FROM node:20-slim
 
-# 1. Install Chrome dependencies (The hard part)
+# Install Chrome and dependencies
 RUN apt-get update \
     && apt-get install -y wget gnupg \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
       --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Setup App
+# Set Chrome path for Puppeteer
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
+# Memory optimizations for Render free tier
+ENV NODE_OPTIONS="--max-old-space-size=460"
+
+# Create app directory
 WORKDIR /usr/src/app
+
+# Copy package files
 COPY package*.json ./
 
-# 3. Install Node Deps
+# Install Node dependencies
 RUN npm install
 
-# 4. Copy Code
+# Copy application code
 COPY . .
 
-# 5. Start
-CMD [ "node", "index.js" ]
+# Create necessary directories
+RUN mkdir -p uploads face_service/faces .wwebjs_auth
+
+# Expose port
+EXPOSE 8000
+
+# Start the application
+CMD ["node", "index.js"]

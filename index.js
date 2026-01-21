@@ -198,13 +198,41 @@ client.on('loading_screen', async () => {
     } catch(e) {}
 });
 
-// Initialize
-log('INFO', 'Initializing WhatsApp...');
-clientInitializing = true;
-client.initialize().catch(err => {
-    log('ERROR', 'Init failed', { error: err.message });
-    clientInitializing = false;
-});
+// Initialize (with retry protection)
+let initAttempts = 0;
+const MAX_INIT_ATTEMPTS = 3;
+
+async function initializeClient() {
+    if (initAttempts >= MAX_INIT_ATTEMPTS) {
+        log('ERROR', 'Max init attempts reached. Please restart service manually.');
+        return;
+    }
+    
+    if (clientInitializing) {
+        log('WARN', 'Already initializing, skipping duplicate attempt');
+        return;
+    }
+    
+    initAttempts++;
+    clientInitializing = true;
+    log('INFO', `Initializing WhatsApp (attempt ${initAttempts}/${MAX_INIT_ATTEMPTS})...`);
+    
+    try {
+        await client.initialize();
+    } catch (err) {
+        log('ERROR', 'Init failed', { error: err.message, attempt: initAttempts });
+        clientInitializing = false;
+        
+        // Retry after delay if not max attempts
+        if (initAttempts < MAX_INIT_ATTEMPTS) {
+            log('INFO', 'Retrying in 10 seconds...');
+            setTimeout(initializeClient, 10000);
+        }
+    }
+}
+
+// Start initialization
+initializeClient();
 
 // --- BACKGROUND REMOVAL ---
 async function addEventBackground(inputPath) {
