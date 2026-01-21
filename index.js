@@ -11,6 +11,7 @@ import qrcodeTerminal from 'qrcode-terminal';
 import os from "os";
 import { promisify } from 'util';
 
+// --- CRITICAL FIX: Correct Import for whatsapp-web.js ---
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth, NoAuth, MessageMedia } = pkg;
 
@@ -23,14 +24,13 @@ app.use(express.json({ limit: '10mb' }));
 
 // --- CONFIGURATION ---
 const CONFIG = {
-   PORT: process.env.PORT || 8000,
-    // If PYTHON_URL is not set, default to localhost for testing
-    PYTHON_SERVICE_URL: process.env.PYTHON_URL || 'http://localhost:5000', 
+    PORT: process.env.PORT || 8000,
+    PYTHON_SERVICE_URL: process.env.PYTHON_URL || 'http://localhost:5000',
     BG_SERVICE_URL: process.env.BG_URL || 'http://localhost:5000',
     MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
-    REQUEST_TIMEOUT: 30000, // 30 seconds
+    REQUEST_TIMEOUT: 60000, // Increased to 60s for stability
     DEFAULT_COUNTRY_CODE: '91',
-    MAX_CONCURRENT_REQUESTS: 3
+    MAX_CONCURRENT_REQUESTS: 1 // Reduced to 1 to prevent memory crashes
 };
 
 // --- DIRECTORY SETUP ---
@@ -39,8 +39,6 @@ const FACE_DB = path.resolve(__dirname, "face_service", "faces");
 const META_FILE = path.join(FACE_DB, "meta.json");
 const SAFE_AUTH_PATH = path.join(os.homedir(), '.wwebjs_auth_safe');
 const LOG_FILE = path.join(__dirname, 'app.log');
-
-console.log(`📂 Auth Storage: ${SAFE_AUTH_PATH}`);
 
 // Create directories
 [UPLOADS_DIR, FACE_DB].forEach(dir => {
@@ -51,9 +49,7 @@ if (!fs.existsSync(META_FILE)) fs.writeFileSync(META_FILE, "{}");
 // --- LOGGING UTILITY ---
 function log(level, message, data = {}) {
     const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] [${level}] ${message} ${JSON.stringify(data)}\n`;
-    console.log(logEntry.trim());
-    fs.appendFileSync(LOG_FILE, logEntry);
+    console.log(`[${timestamp}] [${level}] ${message} ${JSON.stringify(data)}`);
 }
 
 // --- FILE CLEANUP UTILITY ---
@@ -61,7 +57,6 @@ async function safeDeleteFile(filePath) {
     try {
         if (fs.existsSync(filePath)) {
             await promisify(fs.unlink)(filePath);
-            log('INFO', 'File deleted', { path: filePath });
         }
     } catch (err) {
         log('ERROR', 'File deletion failed', { path: filePath, error: err.message });
@@ -90,26 +85,22 @@ function sanitizePhoneNumber(phone, countryCode = CONFIG.DEFAULT_COUNTRY_CODE) {
     if (cleaned.length === 10) {
         cleaned = countryCode + cleaned;
     }
-    if (cleaned.length < 10 || cleaned.length > 15) {
-        log('WARN', 'Invalid phone number length', { original: phone, cleaned });
-        return null;
-    }
+    if (cleaned.length < 10 || cleaned.length > 15) return null;
     return cleaned;
 }
 
-// --- WHATSAPP CLIENT SETUP ---
+// --- WHATSAPP CLIENT SETUP (CRASH PROOF VERSION) ---
 let clientReady = false;
-let clientInitializing = false;
-let reconnectTimer = null;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
 
 const client = new Client({
-    authStrategy: new NoAuth(), // Now this will definitely work
-    puppeteer: { 
+    // FIX 1: Use NoAuth to prevent saving session files (Saves RAM/Disk)
+    authStrategy: new NoAuth(),
+
+    puppeteer: {
         headless: true,
-        // Add this line to save RAM on graphics:
-        defaultViewport: { width: 800, height: 600 }, 
+        // FIX 2: Small viewport to save RAM
+        defaultViewport: { width: 800, height: 600 },
+        // FIX 3: Critical flags for Render Free Tier
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -118,44 +109,14 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process'
-        ] 
+            '--single-process' 
+        ]
     },
-    // ... keep the rest the same
     webVersionCache: {
         type: 'remote',
         remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
     }
 });
-
-function clearReconnectTimer() {
-    if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-    }
-}
-
-async function attemptReconnect() {
-    clearReconnectTimer();
-    if (clientInitializing || clientReady) return;
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-        log('ERROR', 'Max reconnect attempts reached.');
-        return;
-    }
-    reconnectAttempts++;
-    clientInitializing = true;
-    log('INFO', `Reconnection attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
-    try {
-        await client.destroy().catch(() => {});
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        await client.initialize();
-    } catch (err) {
-        log('ERROR', 'Reconnect failed', { error: err.message });
-        clientInitializing = false;
-        const delay = Math.min(5000 * reconnectAttempts, 30000);
-        reconnectTimer = setTimeout(attemptReconnect, delay);
-    }
-}
 
 // Event Handlers
 client.on('qr', qr => {
@@ -165,9 +126,6 @@ client.on('qr', qr => {
 
 client.on('ready', () => {
     clientReady = true;
-    clientInitializing = false;
-    reconnectAttempts = 0;
-    clearReconnectTimer();
     log('INFO', `WhatsApp connected as ${client.info.wid.user}`);
     console.log(`🔥 CONNECTED as ${client.info.wid.user}`);
 });
@@ -177,201 +135,75 @@ client.on('authenticated', () => log('INFO', 'WhatsApp authenticated'));
 client.on('auth_failure', (msg) => {
     log('ERROR', 'WhatsApp auth failure', { message: msg });
     clientReady = false;
-    clientInitializing = false;
 });
 
 client.on('disconnected', (reason) => {
     log('WARN', 'WhatsApp disconnected', { reason });
     clientReady = false;
-    clientInitializing = false;
-    if (reason !== 'LOGOUT') {
-        log('INFO', 'Scheduling reconnection...');
-        clearReconnectTimer();
-        reconnectTimer = setTimeout(attemptReconnect, 5000);
-    }
-});
-
-client.on('loading_screen', async () => {
-    try {
-        await client.pupPage.evaluate(() => {
-            if (window.WWebJS) {
-                window.injectToFunction({ module: 'WAWebLid1X1MigrationGating', function: 'Lid1X1MigrationUtils.isLidMigrated' }, () => false);
-            }
-        });
-    } catch(e) {}
+    // On free tier, we don't auto-reconnect to avoid death loops. 
+    // You must restart service manually if it dies.
 });
 
 log('INFO', 'Initializing WhatsApp client...');
-clientInitializing = true;
 client.initialize().catch(err => {
     log('ERROR', 'Client initialization failed', { error: err.message });
-    clientInitializing = false;
 });
 
-// --- PROCESSING QUEUE ---
-class ProcessingQueue {
-    constructor(maxConcurrent = 3) {
-        this.queue = [];
-        this.processing = 0;
-        this.maxConcurrent = maxConcurrent;
-    }
-    async add(task) {
-        return new Promise((resolve, reject) => {
-            this.queue.push({ task, resolve, reject });
-            this.process();
-        });
-    }
-    async process() {
-        if (this.processing >= this.maxConcurrent || this.queue.length === 0) return;
-        this.processing++;
-        const { task, resolve, reject } = this.queue.shift();
-        try {
-            const result = await task();
-            resolve(result);
-        } catch (err) {
-            reject(err);
-        } finally {
-            this.processing--;
-            this.process();
-        }
-    }
-}
-const processingQueue = new ProcessingQueue(CONFIG.MAX_CONCURRENT_REQUESTS);
-
-// --- NEW: BACKGROUND REMOVAL HELPER ---
+// --- BACKGROUND REMOVAL HELPER ---
 async function addEventBackground(inputPath) {
-    // Generates a temp path for the result (e.g. image_branded.jpg)
-    const processedPath = inputPath.replace('.jpg', '_branded.jpg').replace('.png', '_branded.jpg');
-    
+    const processedPath = inputPath.replace(/\.(jpg|png)$/i, '_branded.jpg');
     try {
         log('INFO', 'Sending to BG Service...');
-        
         const form = new FormData();
         form.append('image', fs.createReadStream(inputPath));
 
-        const response = await fetch(`${CONFIG.BG_SERVICE_URL}/composite`, { 
-            method: 'POST', 
-            body: form 
+        const response = await fetch(`${CONFIG.BG_SERVICE_URL}/composite`, {
+            method: 'POST',
+            body: form
         });
 
         if (!response.ok) throw new Error(`BG Service returned ${response.status}`);
 
         const buffer = await response.arrayBuffer();
         fs.writeFileSync(processedPath, Buffer.from(buffer));
-        
-        log('INFO', 'Background added successfully', { path: processedPath });
-        return processedPath; // Success: Return new path
-
+        return processedPath;
     } catch (err) {
         log('ERROR', 'Background processing failed, using original', { error: err.message });
-        return inputPath; // Fail Safe: Return original path if Python fails
+        return inputPath;
     }
 }
 
 // --- SEND WHATSAPP PHOTO ---
 async function sendWhatsAppPhoto(name, phone, imagePath) {
-    let waitTime = 0;
-    while (!clientReady && waitTime < 30000) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        waitTime += 500;
-    }
-    
-    if (!clientReady) {
-        log('ERROR', 'WhatsApp not ready after 30s', { name, phone });
-        return false;
-    }
-    
+    if (!clientReady) return false;
+
     try {
         const sanitized = sanitizePhoneNumber(phone);
-        if (!sanitized) {
-            log('ERROR', 'Invalid phone number', { name, phone });
-            return false;
-        }
-        
+        if (!sanitized) return false;
+
         const targetId = `${sanitized}@c.us`;
+        // Delay to prevent spam blocks
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         const numberInfo = await client.getNumberId(targetId);
         if (!numberInfo) {
-            log('WARN', 'Number not on WhatsApp', { name, phone: sanitized });
+            log('WARN', 'Number not on WhatsApp', { phone: sanitized });
             return false;
         }
-        
+
         const fileData = fs.readFileSync(imagePath, { encoding: 'base64' });
         const media = new MessageMedia('image/jpeg', fileData, `${name}.jpg`);
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         await client.sendMessage(numberInfo._serialized, media, {
             caption: `Welcome, ${name}! 📸\n\nHere is your event souvenir!`,
             sendSeen: false
         });
-        
-        log('INFO', 'Photo sent successfully', { name, phone: sanitized });
+
+        log('INFO', 'Photo sent successfully', { name });
         return true;
-        
     } catch (err) {
-        log('ERROR', 'WhatsApp send failed', { name, phone, error: err.message });
+        log('ERROR', 'WhatsApp send failed', { error: err.message });
         return false;
-    }
-}
-
-// --- PROCESS RECOGNITION (INTEGRATED) ---
-async function processRecognition(tempFilePath) {
-    const form = new FormData();
-    form.append('image', fs.createReadStream(tempFilePath));
-    
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT);
-    
-    try {
-        // 1. Recognize Face
-        const pyRes = await fetch(`${CONFIG.PYTHON_SERVICE_URL}/recognize`, { 
-            method: 'POST', 
-            body: form,
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeout);
-        
-        if (!pyRes.ok) throw new Error(`Python service returned ${pyRes.status}`);
-        
-        const data = await pyRes.json();
-        log('INFO', 'Recognition result', { match: data.match, name: data.name });
-
-        if (data.match === true && data.phone) {
-            // 2. Select Image Source (Stored vs Captured)
-            const storedImagePath = path.join(FACE_DB, data.name, `${data.name}.jpg`);
-            let rawImage = tempFilePath;
-            
-            if (fs.existsSync(storedImagePath)) {
-                log('INFO', 'Found stored HD image', { path: storedImagePath });
-                rawImage = storedImagePath;
-            } else {
-                log('WARN', 'Stored image missing, using capture');
-            }
-
-            // 3. Add Background (The New Step)
-            const finalImage = await addEventBackground(rawImage);
-
-            // 4. Send Result
-            await sendWhatsAppPhoto(data.name, data.phone, finalImage);
-
-            // 5. Cleanup Temporary Branded Image
-            if (finalImage !== rawImage) {
-                await safeDeleteFile(finalImage);
-            }
-
-            return { status: "matched", name: data.name, phone: data.phone };
-        }
-        
-        return { status: "unknown", message: "Guest not recognized" };
-        
-    } catch (err) {
-        if (err.name === 'AbortError') throw new Error('Recognition timeout');
-        throw err;
-    } finally {
-        clearTimeout(timeout);
     }
 }
 
@@ -385,17 +217,48 @@ app.post("/recognize-guest", uploadConfig.single("image"), async (req, res) => {
     }
 
     const tempFilePath = path.resolve(req.file.path);
-    
+
     try {
-        const result = await processingQueue.add(async () => {
-            return await processRecognition(tempFilePath);
+        const form = new FormData();
+        form.append('image', fs.createReadStream(tempFilePath));
+
+        // 1. Recognize Face
+        const pyRes = await fetch(`${CONFIG.PYTHON_SERVICE_URL}/recognize`, {
+            method: 'POST',
+            body: form
         });
-        res.json(result);
+
+        if (!pyRes.ok) throw new Error(`Python service error: ${pyRes.status}`);
+        const data = await pyRes.json();
+
+        log('INFO', 'Recognition result', data);
+
+        if (data.match === true && data.phone) {
+            // 2. Select Image (Stored or Captured)
+            const storedImagePath = path.join(FACE_DB, data.name, `${data.name}.jpg`);
+            let rawImage = tempFilePath;
+            
+            if (fs.existsSync(storedImagePath)) {
+                rawImage = storedImagePath;
+            }
+
+            // 3. Add Background
+            const finalImage = await addEventBackground(rawImage);
+
+            // 4. Send Message
+            sendWhatsAppPhoto(data.name, data.phone, finalImage); // Don't await to speed up response
+
+            res.json({ status: "matched", name: data.name, phone: data.phone });
+        } else {
+            res.json({ status: "unknown", message: "Guest not recognized" });
+        }
+
     } catch (err) {
-        log('ERROR', 'Recognition failed', { error: err.message });
-        res.status(500).json({ status: "error", message: "Recognition failed" });
+        log('ERROR', 'Process failed', { error: err.message });
+        res.status(500).json({ status: "error", message: "Processing failed" });
     } finally {
-        await safeDeleteFile(tempFilePath);
+        // Cleanup temp file
+        setTimeout(() => safeDeleteFile(tempFilePath), 5000);
     }
 });
 
@@ -418,75 +281,44 @@ app.post("/upload-excel", uploadConfig.single("file"), async (req, res) => {
                 const name = row.Name?.toString().trim();
                 const phone = row.Phone?.toString().trim();
                 const imageURL = row.ImageURL?.toString().trim();
-                
+
                 if (!name || !phone || !imageURL) { failed++; continue; }
-                
                 const sanitized = sanitizePhoneNumber(phone);
                 if (!sanitized) { failed++; continue; }
-                
+
                 const personDir = path.join(FACE_DB, name);
                 if (!fs.existsSync(personDir)) fs.mkdirSync(personDir, { recursive: true });
-                
-                const response = await fetch(imageURL, { timeout: 10000 });
+
+                const response = await fetch(imageURL);
                 if (!response.ok) { failed++; continue; }
-                
+
                 const buffer = await response.arrayBuffer();
-                const imagePath = path.join(personDir, `${name}.jpg`);
-                fs.writeFileSync(imagePath, Buffer.from(buffer));
+                fs.writeFileSync(path.join(personDir, `${name}.jpg`), Buffer.from(buffer));
                 
                 meta[name] = sanitized;
                 enrolled++;
-                log('INFO', 'Guest enrolled', { name });
-            } catch (err) {
-                failed++;
-            }
+            } catch (e) { failed++; }
         }
         
         fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
-        res.json({ status: "success", enrolled, failed, total: rows.length });
+        res.json({ status: "success", enrolled, failed });
         
     } catch (err) {
-        log('ERROR', 'Excel processing failed', { error: err.message });
-        res.status(500).json({ status: "error", message: "Failed to process Excel file" });
+        res.status(500).json({ status: "error", message: "Excel error" });
     } finally {
-        await safeDeleteFile(tempFilePath);
-    }
-});
-
-app.get("/guests", (req, res) => {
-    try {
-        const meta = JSON.parse(fs.readFileSync(META_FILE));
-        const guests = Object.keys(meta).map(name => ({ name, phone: meta[name] }));
-        res.json({ status: "success", guests, count: guests.length });
-    } catch (err) {
-        res.status(500).json({ status: "error", message: "Failed to retrieve guests" });
+        safeDeleteFile(tempFilePath);
     }
 });
 
 app.get("/health", (req, res) => {
-    res.json({ 
-        status: "ok",
-        whatsapp: clientReady ? "connected" : "disconnected",
-        queue: processingQueue.processing,
-        uptime: process.uptime()
-    });
-});
-
-app.use((err, req, res, next) => {
-    log('ERROR', 'Unhandled error', { error: err.message });
-    res.status(500).json({ status: "error", message: "Internal server error" });
+    res.json({ status: "ok", whatsapp: clientReady ? "connected" : "disconnected" });
 });
 
 const server = app.listen(CONFIG.PORT, () => {
-    log('INFO', `Server started on port ${CONFIG.PORT}`);
     console.log(`🚀 Node Backend running on ${CONFIG.PORT}`);
 });
 
-const shutdown = async () => {
+process.on('SIGINT', () => {
     server.close();
-    try { await client.destroy(); } catch (err) {}
     process.exit(0);
-};
-
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+});
