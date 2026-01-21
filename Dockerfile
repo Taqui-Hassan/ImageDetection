@@ -14,10 +14,6 @@ RUN apt-get update \
 # Set Chrome path for Puppeteer
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
-# Memory optimizations for Render free tier (512MB)
-ENV NODE_OPTIONS="--max-old-space-size=350"
-ENV PUPPETEER_ARGS="--disable-dev-shm-usage --no-sandbox"
-
 # Create app directory
 WORKDIR /usr/src/app
 
@@ -31,7 +27,7 @@ RUN npm install
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p uploads face_service/faces .wwebjs_auth
+RUN mkdir -p uploads face_service/faces
 
 # Expose port
 EXPOSE 8000
