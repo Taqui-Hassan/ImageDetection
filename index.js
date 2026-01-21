@@ -152,8 +152,7 @@ const client = new Client({
             (process.platform === 'win32' 
                 ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
                 : undefined)),
-        userDataDir: path.join(SAFE_AUTH_PATH, 'chrome-profile'),
-        // EXTREME memory optimization for Render free tier
+        // REMOVED userDataDir - not compatible with LocalAuth
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -167,7 +166,6 @@ const client = new Client({
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
-            // Additional memory-saving flags
             '--disable-software-rasterizer',
             '--disable-webgl',
             '--disable-3d-apis',
