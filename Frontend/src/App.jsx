@@ -15,7 +15,7 @@ function App() {
 
   // 👇 LOGIN FUNCTION
   const handleLogin = () => {
-    // CHANGE THIS PASSWORD TO WHATEVER YOU WANT
+    
     if (passwordInput === "admin123") {
       setIsAuthenticated(true);
     } else {
