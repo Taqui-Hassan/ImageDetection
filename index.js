@@ -53,6 +53,7 @@ const client = new Client({
             '--disable-gpu'
         ]
     },
+    // Locking to stable version to prevent bugs
     webVersionCache: {
         type: 'remote',
         remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
@@ -84,12 +85,11 @@ function formatPhoneNumber(phone) {
 
 // --- ROUTES ---
 
-// 1. GET GUESTS (Updated for new structure)
+// 1. GET GUESTS
 app.get("/guests", (req, res) => {
     try {
         if (fs.existsSync(META_FILE)) {
             const meta = JSON.parse(fs.readFileSync(META_FILE));
-            // Map the new object structure back to an array
             const guests = Object.keys(meta).map(name => ({ 
                 name, 
                 phone: meta[name].phone,
@@ -112,6 +112,7 @@ app.delete("/guests/:name", (req, res) => {
         if (meta[nameToDelete]) {
             delete meta[nameToDelete];
             fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+            console.log(`🗑️ Deleted guest: ${nameToDelete}`);
             res.json({ status: "success" });
         } else {
             res.status(404).json({ error: "Guest not found" });
@@ -123,10 +124,11 @@ app.delete("/guests/:name", (req, res) => {
 
 const upload = multer({ dest: UPLOADS_DIR });
 
-// 3. RECOGNIZE & SEND SEAT NUMBER
+// 3. RECOGNIZE & SEND
 app.post("/recognize-guest", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No image" });
     
+    // Rename to .jpg so WhatsApp recognizes it as an image
     const originalPath = req.file.path;
     const filePath = originalPath + '.jpg';
     fs.renameSync(originalPath, filePath);
@@ -136,7 +138,6 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
             return res.status(503).json({ error: "WhatsApp starting..." });
         }
 
-        // Ask AI
         const form = new FormData();
         form.append('image', fs.createReadStream(filePath));
 
@@ -151,29 +152,32 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
 
         if (data.match && data.name) {
             const meta = JSON.parse(fs.readFileSync(META_FILE));
-            const guestData = meta[data.name]; // Retrieve object { phone, seat }
+            
+            // Case-Insensitive Lookup (Matches "taqui" to "Taqui")
+            const foundName = Object.keys(meta).find(key => key.toLowerCase() === data.name.toLowerCase());
+            const guestData = foundName ? meta[foundName] : null;
 
             if (!guestData || !guestData.phone) {
-                return res.json({ status: "matched", name: data.name, warning: "No phone found" });
+                console.log(`⚠️ Match found for '${data.name}', but not in Excel list.`);
+                return res.json({ status: "matched", name: data.name, warning: "No phone found in Excel" });
             }
 
             const cleanPhone = formatPhoneNumber(guestData.phone);
             const seatNumber = guestData.seat || "Assigned on arrival";
             const chatId = `${cleanPhone}@c.us`;
 
-            // 👇 THE MESSAGE WITH SEAT NUMBER
-            const caption = `🎉 Welcome ${data.name}!\n\n📍 *Your Seat Number is: ${seatNumber}*\n\nEnjoy the event! 🚀`;
+            const caption = `🎉 Welcome ${foundName}!\n\n📍 *Your Seat Number is: ${seatNumber}*\n\nEnjoy the event! 🚀`;
 
             try {
                 const media = MessageMedia.fromFilePath(filePath);
                 await client.sendMessage(chatId, media, { caption });
                 
-                console.log(`✅ Sent Seat ${seatNumber} to ${data.name}`);
-                res.json({ status: "matched", name: data.name, phone: cleanPhone, seat: seatNumber, messageSent: true });
+                console.log(`✅ Sent Seat ${seatNumber} to ${foundName}`);
+                res.json({ status: "matched", name: foundName, phone: cleanPhone, seat: seatNumber, messageSent: true });
 
             } catch (waErr) {
                 console.error("❌ Send Failed:", waErr.message);
-                res.json({ status: "matched", name: data.name, error: "WhatsApp failed" });
+                res.json({ status: "matched", name: foundName, error: "WhatsApp failed" });
             }
         } else {
             res.json({ status: "unknown" });
@@ -186,7 +190,7 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
     }
 });
 
-// 4. UPLOAD EXCEL (Now reads 'Seat' column)
+// 4. UPLOAD EXCEL
 app.post("/upload-excel", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error" });
     const tempFilePath = req.file.path;
@@ -201,12 +205,10 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
         for (const row of rows) {
             const name = row.Name?.toString().trim();
             const phone = row.Phone?.toString().trim();
-            
-            // 👇 Try to find the Seat column (Check multiple spellings)
+            // Check possible seat column names
             const seat = row.Seat || row["Seat Number"] || row["SeatNo"] || "General";
 
             if (name && phone) {
-                // Save as OBJECT now: { phone: "...", seat: "..." }
                 meta[name] = {
                     phone: formatPhoneNumber(phone),
                     seat: seat.toString()
