@@ -6,3 +6,4 @@ venv/
 .wwebjs_auth_safe/
 uploads/
 *.log
+.wwebjs_cache
