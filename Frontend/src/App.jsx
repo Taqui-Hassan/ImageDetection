@@ -19,6 +19,9 @@ function App() {
       setStatus("Uploading and enrolling faces...");
       const res = await fetch(`${import.meta.env.VITE_API_URL}/upload-excel`, {
         method: "POST",
+        headers:{
+            "ngrok-skip-browser-warning": "true"
+        },
         body: formData,
       });
       const data = await res.json();

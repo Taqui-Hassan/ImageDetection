@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { Button, Box, Typography, CircularProgress, Alert } from "@mui/material";
+import { Button, Box, CircularProgress, Alert } from "@mui/material";
 
 export default function FaceCapture() {
   const videoRef = useRef(null);
@@ -36,12 +36,19 @@ export default function FaceCapture() {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL}/recognize-guest`, {
           method: "POST",
+          // 👇 FIX 1: ADD THIS HEADER TO BYPASS NGROK WARNING
+          headers: {
+            "ngrok-skip-browser-warning": "true",
+          },
           body: formData,
         });
+        
         const data = await res.json();
+        console.log("Recognition Data:", data); // Debugging log
         setResult(data);
       } catch (err) {
-        setResult({ error: "Failed to reach backend" });
+        console.error(err);
+        setResult({ error: "Failed to connect. Is the backend running?" });
       } finally {
         setLoading(false);
       }
@@ -60,21 +67,17 @@ export default function FaceCapture() {
       </Box>
 
       <Box mt={3} width="100%" sx={{ minHeight: '60px' }}>
-        {/* SUCCESS CASE */}
-        {result?.status === "Matched" && result?.name && (
+        
+        {/* 👇 FIX 2: LOWERCASE "matched" TO MATCH BACKEND */}
+        {result?.status === "matched" && result?.name && (
           <Alert severity="success" variant="filled">
             Welcome, <strong>{result.name}</strong>! WhatsApp message sent.
           </Alert>
         )}
 
-        {/* UNKNOWN CASE */}
-        {result?.status === "Unknown" && (
+        {/* 👇 FIX 2: LOWERCASE "unknown" TO MATCH BACKEND */}
+        {result?.status === "unknown" && (
           <Alert severity="warning" variant="filled">Guest Not Found.</Alert>
-        )}
-
-        {/* BUSY CASE (From Node.js Guard) */}
-        {result?.status === "Busy" && (
-          <Alert severity="info" variant="outlined">System is busy processing WhatsApp... wait 2 seconds.</Alert>
         )}
 
         {/* ERROR CASE */}

@@ -6,7 +6,12 @@ export default function GuestList() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch(`${import.meta.env.VITE_API_URL}/guests`)
+        fetch(`${import.meta.env.VITE_API_URL}/guests`, {
+            headers: {
+                "ngrok-skip-browser-warning": "true",
+                "Content-Type": "application/json"
+            }
+        })
             .then(res => res.json())
             .then(data => {
                 setGuests(data);
