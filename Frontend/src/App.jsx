@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Container, CssBaseline, Box, Paper, Typography, Button, TextField, ThemeProvider, createTheme, Fade, Grid } from '@mui/material';
+import { Container, CssBaseline, Box, Paper, Typography, Button, TextField, ThemeProvider, createTheme, Fade, Grid, Chip } from '@mui/material';
 import FaceCapture from './components/faceCapture';
 import GuestList from './components/guestList';
 import BulkSender from './components/bulkSender'; 
-
-import SystemStatus from './components/systemStatus'; 
+import SystemStatus from './components/systemStatus'; // ✅ Imported with Capital Letter
 
 // ICONS
 import LockIcon from '@mui/icons-material/Lock';
@@ -34,8 +33,6 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [currentModule, setCurrentModule] = useState("menu"); 
-  
-  // SHARED STATE FOR SCANNER MODULE
   const [excelFile, setExcelFile] = useState(null);
   const [uploadStatus, setUploadStatus] = useState("");
 
@@ -79,12 +76,11 @@ function App() {
     );
   }
 
-  // 2. MAIN APP CONTAINER
+  // 2. MAIN APP
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', bgcolor: '#0f172a', pb: 5 }}>
-        {/* HEADER */}
         <Box sx={{ borderBottom: '1px solid #334155', bgcolor: '#1e293b', py: 2, px: 4, display: 'flex', justifyContent: 'space-between' }}>
             <Typography variant="h6" color="white">EVENT OS <span style={{opacity:0.5}}>v2.1</span></Typography>
             <Button startIcon={<LogoutIcon />} color="inherit" onClick={() => setIsAuthenticated(false)}>LOGOUT</Button>
@@ -92,42 +88,27 @@ function App() {
 
         <Container maxWidth="md" sx={{ mt: 5 }}>
             
-            {/* 👇 FIX 2: Use Capitalized Tag */}
+            {/* ✅ SYSTEM STATUS WIDGET */}
             <SystemStatus />
 
-            {/* --- VIEW 1: MODULE SELECTION MENU --- */}
+            {/* --- MENU --- */}
             {currentModule === "menu" && (
                 <Fade in={true}>
                     <Box>
                         <Typography variant="h4" color="white" gutterBottom sx={{ mb: 4 }}>SELECT MODULE</Typography>
                         <Grid container spacing={3}>
-                            {/* CARD A: AI SCANNER */}
                             <Grid item xs={12} md={6}>
-                                <Paper 
-                                    onClick={() => setCurrentModule('scanner')}
-                                    sx={{ 
-                                        p: 4, cursor: 'pointer', border: '1px solid #334155', height: '100%',
-                                        transition: 'all 0.3s', '&:hover': { transform: 'translateY(-5px)', borderColor: '#3b82f6', boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)' } 
-                                    }}
-                                >
+                                <Paper onClick={() => setCurrentModule('scanner')} sx={{ p: 4, cursor: 'pointer', border: '1px solid #334155', height: '100%', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-5px)', borderColor: '#3b82f6' } }}>
                                     <FaceRetouchingNaturalIcon sx={{ fontSize: 50, color: '#3b82f6', mb: 2 }} />
-                                    <Typography variant="h5" fontWeight="bold" gutterBottom>AI SCANNER</Typography>
-                                    <Typography variant="body2" color="textSecondary">Biometric recognition for registered VIPs. Includes database management.</Typography>
+                                    <Typography variant="h5" fontWeight="bold">AI SCANNER</Typography>
+                                    <Typography variant="body2" color="textSecondary">Biometric recognition & DB Management.</Typography>
                                 </Paper>
                             </Grid>
-
-                            {/* CARD B: BULK SENDER */}
                             <Grid item xs={12} md={6}>
-                                <Paper 
-                                    onClick={() => setCurrentModule('bulk')}
-                                    sx={{ 
-                                        p: 4, cursor: 'pointer', border: '1px solid #334155', height: '100%',
-                                        transition: 'all 0.3s', '&:hover': { transform: 'translateY(-5px)', borderColor: '#10b981', boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)' } 
-                                    }}
-                                >
+                                <Paper onClick={() => setCurrentModule('bulk')} sx={{ p: 4, cursor: 'pointer', border: '1px solid #334155', height: '100%', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-5px)', borderColor: '#10b981' } }}>
                                     <CellTowerIcon sx={{ fontSize: 50, color: '#10b981', mb: 2 }} />
-                                    <Typography variant="h5" fontWeight="bold" gutterBottom>DIRECT BLAST</Typography>
-                                    <Typography variant="body2" color="textSecondary">Mass broadcast to unknown guest lists via Excel. No facial recognition required.</Typography>
+                                    <Typography variant="h5" fontWeight="bold">DIRECT BLAST</Typography>
+                                    <Typography variant="body2" color="textSecondary">Mass message via Excel + Image URLs.</Typography>
                                 </Paper>
                             </Grid>
                         </Grid>
@@ -135,41 +116,46 @@ function App() {
                 </Fade>
             )}
 
-            {/* --- VIEW 2: AI SCANNER MODULE --- */}
+            {/* --- MODULE 1: AI SCANNER --- */}
             {currentModule === "scanner" && (
                 <Fade in={true}>
                     <Box>
                         <Button onClick={() => setCurrentModule('menu')} sx={{ mb: 2, color: '#94a3b8' }}>&larr; RETURN TO MODULES</Button>
                         
-                        {/* 2.1 DB UPLOAD */}
-                        <Paper sx={{ p: 3, mb: 4, display: 'flex', alignItems: 'center', gap: 2, borderLeft: '4px solid #3b82f6' }}>
-                            <Box flexGrow={1}>
-                                <Typography variant="h6" color="primary">BIOMETRIC DATA IMPORT</Typography>
-                                <Typography variant="caption" color="textSecondary">Update known guest database.</Typography>
+                        {/* 2.1 DB UPLOAD WITH FORMAT GUIDE */}
+                        <Paper sx={{ p: 3, mb: 4, borderLeft: '4px solid #3b82f6', bgcolor: 'rgba(59, 130, 246, 0.05)' }}>
+                            <Box display="flex" alignItems="center" gap={2} mb={2}>
+                                <Box flexGrow={1}>
+                                    <Typography variant="h6" color="primary">BIOMETRIC DATA IMPORT</Typography>
+                                    <Typography variant="caption" color="textSecondary">Update known guest database.</Typography>
+                                </Box>
+                                <Button component="label" variant="outlined" startIcon={<UploadFileIcon />}>
+                                    {excelFile ? excelFile.name : "SELECT FILE"}
+                                    <input type="file" hidden accept=".xlsx, .xls" onChange={(e) => setExcelFile(e.target.files[0])} />
+                                </Button>
+                                <Button variant="contained" onClick={handleExcelUpload} disabled={!excelFile}>UPDATE DB</Button>
                             </Box>
-                            <Button component="label" variant="outlined" startIcon={<UploadFileIcon />}>
-                                {excelFile ? excelFile.name : "SELECT FILE"}
-                                <input type="file" hidden accept=".xlsx, .xls" onChange={(e) => setExcelFile(e.target.files[0])} />
-                            </Button>
-                            <Button variant="contained" onClick={handleExcelUpload} disabled={!excelFile}>UPDATE DB</Button>
-                            {uploadStatus && <Typography variant="caption" sx={{ color: '#10b981' }}>{uploadStatus}</Typography>}
+
+                            {/* FORMAT GUIDE */}
+                            <Box sx={{ p: 1.5, bgcolor: '#1e293b', borderRadius: 2, border: '1px dashed #475569', display: 'flex', gap: 2, alignItems: 'center' }}>
+                                <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 'bold' }}>REQUIRED COLUMNS:</Typography>
+                                <Box display="flex" gap={1}>
+                                    {['Name', 'Phone', 'Seat'].map((col) => (
+                                        <Chip key={col} label={col} size="small" sx={{ bgcolor: '#334155', color: '#fff', borderRadius: 1, fontSize: '0.7rem' }} />
+                                    ))}
+                                </Box>
+                            </Box>
+                            {uploadStatus && <Typography variant="caption" sx={{ color: '#10b981', mt: 1, display: 'block' }}>{uploadStatus}</Typography>}
                         </Paper>
 
-                        {/* 2.2 SCANNER */}
                         <FaceCapture />
-
-                        {/* 2.3 LIST */}
-                        <Box mt={4}>
-                            <GuestList />
-                        </Box>
+                        <Box mt={4}><GuestList /></Box>
                     </Box>
                 </Fade>
             )}
 
-            {/* --- VIEW 3: BULK SENDER MODULE --- */}
-            {currentModule === "bulk" && (
-                <BulkSender onBack={() => setCurrentModule('menu')} />
-            )}
+            {/* --- MODULE 2: BULK SENDER --- */}
+            {currentModule === "bulk" && <BulkSender onBack={() => setCurrentModule('menu')} />}
 
         </Container>
       </Box>
