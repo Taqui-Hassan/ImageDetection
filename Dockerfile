@@ -14,8 +14,9 @@ RUN apt-get update \
 # Set Chrome path for Puppeteer
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
-# Memory optimizations for Render free tier
-ENV NODE_OPTIONS="--max-old-space-size=460"
+# Memory optimizations for Render free tier (512MB)
+ENV NODE_OPTIONS="--max-old-space-size=350"
+ENV PUPPETEER_ARGS="--disable-dev-shm-usage --no-sandbox"
 
 # Create app directory
 WORKDIR /usr/src/app

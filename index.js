@@ -147,12 +147,13 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
-        // Chrome path detection (works with your Dockerfile)
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 
             (CONFIG.IS_RENDER ? '/usr/bin/google-chrome-stable' : 
             (process.platform === 'win32' 
                 ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
                 : undefined)),
+        userDataDir: path.join(SAFE_AUTH_PATH, 'chrome-profile'),
+        // EXTREME memory optimization for Render free tier
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -163,10 +164,22 @@ const client = new Client({
             '--no-zygote',
             '--single-process',
             '--disable-extensions',
-            // Render-specific optimizations
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding'
+            '--disable-renderer-backgrounding',
+            // Additional memory-saving flags
+            '--disable-software-rasterizer',
+            '--disable-webgl',
+            '--disable-3d-apis',
+            '--disable-default-apps',
+            '--disable-sync',
+            '--no-default-browser-check',
+            '--mute-audio',
+            '--disable-features=site-per-process',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--renderer-process-limit=1',
+            '--disable-crash-reporter'
         ]
     },
     webVersionCache: {
