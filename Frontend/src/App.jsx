@@ -140,7 +140,7 @@ function App() {
                             <Box sx={{ p: 1.5, bgcolor: '#1e293b', borderRadius: 2, border: '1px dashed #475569', display: 'flex', gap: 2, alignItems: 'center' }}>
                                 <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 'bold' }}>REQUIRED COLUMNS:</Typography>
                                 <Box display="flex" gap={1}>
-                                    {['Name', 'Phone', 'Seat'].map((col) => (
+                                    {['Name', 'Phone','ImageURL', 'Seat'].map((col) => (
                                         <Chip key={col} label={col} size="small" sx={{ bgcolor: '#334155', color: '#fff', borderRadius: 1, fontSize: '0.7rem' }} />
                                     ))}
                                 </Box>
