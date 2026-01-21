@@ -111,12 +111,12 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
-        // Render-specific Chrome path (Render uses Chromium buildpack)
-        executablePath: CONFIG.IS_RENDER 
-            ? '/usr/bin/chromium-browser'  // Render's Chromium path
-            : (process.platform === 'win32' 
+        // Chrome path detection (works with your Dockerfile)
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 
+            (CONFIG.IS_RENDER ? '/usr/bin/google-chrome-stable' : 
+            (process.platform === 'win32' 
                 ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-                : undefined),
+                : undefined)),
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
