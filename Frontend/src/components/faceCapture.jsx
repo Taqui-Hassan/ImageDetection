@@ -51,7 +51,7 @@ export default function FaceCapture() {
   };
 
   return (
-    <Paper elevation={4} sx={{ p: 1, borderRadius: 4, overflow: 'hidden', bgcolor: '#000', position: 'relative', maxWidth: 500, mx: 'auto' }}>
+    <Paper elevation={4} sx={{ p: 1, borderRadius: 6, overflow: 'hidden', bgcolor: '#000', position: 'relative', maxWidth: 500, mx: 'auto' }}>
       <Box position="relative" display="flex" justifyContent="center">
         {/* VIDEO FEED */}
         <video ref={videoRef} autoPlay playsInline style={{ width: "100%", borderRadius: "16px", opacity: 0.9 }} />
