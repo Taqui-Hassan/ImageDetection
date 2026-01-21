@@ -1,143 +1,110 @@
 import { useRef, useState, useEffect } from "react";
-import { Button, Box, CircularProgress, Alert } from "@mui/material";
+import { Button, Box, CircularProgress, Alert, Typography, Paper, Fade } from "@mui/material";
+import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
+import CameraAltIcon from '@mui/icons-material/CameraAlt';
 
 export default function FaceCapture() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  
-  // 1. New State for Camera Mode ('user' = Front, 'environment' = Back)
   const [facingMode, setFacingMode] = useState("user");
 
   useEffect(() => {
     let currentStream = null;
-
     const startCamera = async () => {
-      // Stop any existing stream before starting a new one
       if (videoRef.current && videoRef.current.srcObject) {
         const tracks = videoRef.current.srcObject.getTracks();
         tracks.forEach(track => track.stop());
       }
-
       try {
-        // 2. Use the facingMode state to pick the camera
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: facingMode } 
-        });
-        
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode } });
         currentStream = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        console.error("Camera error:", err);
-        setResult({ error: "Could not access camera. Allow permissions." });
-      }
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      } catch (err) { console.error("Camera error:", err); }
     };
-
     startCamera();
-
-    // Cleanup: Stop camera when component unmounts or mode changes
-    return () => {
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [facingMode]); // Re-run this effect when facingMode changes
-
-  // 3. Toggle Function
-  const toggleCamera = () => {
-    setFacingMode(prev => (prev === "user" ? "environment" : "user"));
-  };
+    return () => { if (currentStream) currentStream.getTracks().forEach(track => track.stop()); };
+  }, [facingMode]);
 
   const recognizeFace = async () => {
     if (!videoRef.current) return;
-    setLoading(true);
-    setResult(null);
-
+    setLoading(true); setResult(null);
     const canvas = canvasRef.current;
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
     canvas.getContext("2d").drawImage(videoRef.current, 0, 0);
-
     canvas.toBlob(async (blob) => {
       const formData = new FormData();
       formData.append("image", blob, "capture.jpg");
-
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL}/recognize-guest`, {
           method: "POST",
-          headers: {
-            "ngrok-skip-browser-warning": "true",
-          },
+          headers: { "ngrok-skip-browser-warning": "true" },
           body: formData,
         });
-        
         const data = await res.json();
-        console.log("Recognition Data:", data);
         setResult(data);
-      } catch (err) {
-        console.error(err);
-        setResult({ error: "Failed to connect. Is the backend running?" });
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { setResult({ error: "Connection Failed" }); } 
+      finally { setLoading(false); }
     }, "image/jpeg");
   };
 
   return (
-    <Box textAlign="center" display="flex" flexDirection="column" alignItems="center">
-      <Box position="relative" display="inline-block">
-        <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline // Important for iOS to not go fullscreen
-            style={{ width: "100%", maxWidth: "400px", borderRadius: "8px", border: "2px solid #1976d2" }} 
-        />
+    <Paper elevation={4} sx={{ p: 1, borderRadius: 4, overflow: 'hidden', bgcolor: '#000', position: 'relative', maxWidth: 500, mx: 'auto' }}>
+      <Box position="relative" display="flex" justifyContent="center">
+        {/* VIDEO FEED */}
+        <video ref={videoRef} autoPlay playsInline style={{ width: "100%", borderRadius: "16px", opacity: 0.9 }} />
         
-        {/* SWITCH CAMERA BUTTON (Overlay on top right of video) */}
+        {/* OVERLAY UI */}
         <Button 
-            variant="contained" 
-            color="secondary" 
-            size="small"
-            onClick={toggleCamera}
-            sx={{ 
-                position: "absolute", 
-                top: 10, 
-                right: 10, 
-                opacity: 0.9,
-                fontWeight: "bold"
-            }}
+            variant="contained" color="inherit" size="small" onClick={() => setFacingMode(prev => (prev === "user" ? "environment" : "user"))}
+            sx={{ position: "absolute", top: 15, right: 15, borderRadius: '20px', bgcolor: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(5px)', color: '#fff', '&:hover': { bgcolor: 'rgba(255,255,255,0.4)' } }}
         >
-            🔄 Switch
+            <CameraswitchIcon fontSize="small" />
         </Button>
       </Box>
 
       <canvas ref={canvasRef} style={{ display: "none" }} />
       
-      <Box mt={3}>
-        <Button variant="contained" size="large" onClick={recognizeFace} disabled={loading} sx={{ px: 4, py: 1.5, fontWeight: 'bold' }}>
-          {loading ? <CircularProgress size={24} color="inherit" /> : "RECOGNIZE & WELCOME"}
+      {/* ACTION AREA */}
+      <Box sx={{ p: 3, textAlign: 'center', bgcolor: '#fff', borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
+        <Button 
+            variant="contained" 
+            size="large" 
+            fullWidth
+            onClick={recognizeFace} 
+            disabled={loading} 
+            startIcon={loading ? <CircularProgress size={20} color="inherit"/> : <CameraAltIcon />}
+            sx={{ 
+                py: 1.5, 
+                fontSize: '1.1rem',
+                background: 'linear-gradient(45deg, #6366f1, #8b5cf6)',
+                boxShadow: '0 4px 14px 0 rgba(99, 102, 241, 0.39)'
+            }}
+        >
+          {loading ? "Processing..." : "Scan Guest"}
         </Button>
+
+        {/* RESULTS */}
+        <Box mt={2}>
+            <Fade in={!!result}>
+                <Box>
+                    {result?.status === "matched" && (
+                    <Alert severity="success" variant="filled" sx={{ borderRadius: 2 }}>
+                        🎉 Welcome, <strong>{result.name}</strong>!<br/> Seat: {result.seat || "N/A"}
+                    </Alert>
+                    )}
+                    {result?.status === "unknown" && (
+                    <Alert severity="warning" variant="filled" sx={{ borderRadius: 2 }}>
+                        ⚠️ Guest Not Found
+                    </Alert>
+                    )}
+                    {result?.error && <Alert severity="error">{result.error}</Alert>}
+                </Box>
+            </Fade>
+        </Box>
       </Box>
-
-      <Box mt={3} width="100%" sx={{ minHeight: '60px' }}>
-        
-        {result?.status === "matched" && result?.name && (
-          <Alert severity="success" variant="filled">
-            Welcome, <strong>{result.name}</strong>! WhatsApp message sent.
-          </Alert>
-        )}
-
-        {result?.status === "unknown" && (
-          <Alert severity="warning" variant="filled">Guest Not Found.</Alert>
-        )}
-
-        {result?.error && (
-          <Alert severity="error">{result.error}</Alert>
-        )}
-      </Box>
-    </Box>
+    </Paper>
   );
 }

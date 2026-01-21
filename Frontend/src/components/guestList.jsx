@@ -1,150 +1,88 @@
-import React, { useEffect, useState } from 'react';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Typography, Box, CircularProgress, Button, TextField, Alert } from '@mui/material';
-import LockIcon from '@mui/icons-material/Lock'; // Make sure to install or use text if icon fails
+import React, { useState } from 'react';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Typography, Box, CircularProgress, Button, TextField, Chip, IconButton } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import LockIcon from '@mui/icons-material/Lock';
+import PersonIcon from '@mui/icons-material/Person';
 
 export default function GuestList() {
-    // --- AUTH STATE ---
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
-
-    // --- DATA STATE ---
     const [guests, setGuests] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
 
-    // Function to handle unlocking
-    const handleUnlock = () => {
-        // 👇 SET YOUR GUEST LIST PASSWORD HERE
-        if (password === "list2024") {
-            setIsUnlocked(true);
-            fetchGuests(); // Only fetch data AFTER unlocking
-        } else {
-            setError("Wrong password");
-        }
-    };
-
-    // Function to fetch the list
-    const fetchGuests = () => {
-        setLoading(true);
+    const fetchGuests = (pwd) => {
+        setLoading(true); setError("");
         fetch(`${import.meta.env.VITE_API_URL}/guests`, {
-            headers: { "ngrok-skip-browser-warning": "true" }
+            headers: { "ngrok-skip-browser-warning": "true", "x-admin-password": pwd }
         })
-        .then(res => res.json())
-        .then(data => {
-            setGuests(data);
-            setLoading(false);
+        .then(async res => {
+            if (res.status === 403) throw new Error("Wrong Password");
+            return res.json();
         })
-        .catch(err => {
-            console.error("Error fetching guests:", err);
-            setLoading(false);
-        });
+        .then(data => { setGuests(data); setIsUnlocked(true); setLoading(false); })
+        .catch(err => { setError("Incorrect Password"); setLoading(false); });
     };
 
     const handleDelete = async (name) => {
-        if (!window.confirm(`Are you sure you want to remove ${name}?`)) return;
-
-        try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/guests/${name}`, {
-                method: "DELETE",
-                headers: { "ngrok-skip-browser-warning": "true" }
-            });
-
-            if (res.ok) {
-                setGuests(prev => prev.filter(g => g.name !== name));
-            } else {
-                alert("Failed to delete guest");
-            }
-        } catch (err) {
-            alert("Error connecting to server");
-        }
+        if (!window.confirm(`Remove ${name}?`)) return;
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/guests/${name}`, {
+            method: "DELETE",
+            headers: { "ngrok-skip-browser-warning": "true" }
+        });
+        if (res.ok) setGuests(prev => prev.filter(g => g.name !== name));
     };
 
     // 🔒 LOCKED VIEW
     if (!isUnlocked) {
         return (
-            <Box mt={4} textAlign="center">
-                <Typography variant="h6" gutterBottom color="textSecondary">
-                    🔒 Protected Guest List
-                </Typography>
-                <Paper sx={{ p: 3, maxWidth: 400, mx: 'auto', bgcolor: '#f8f9fa' }} elevation={0} variant="outlined">
-                    <Typography variant="body2" gutterBottom>
-                        Enter admin password to view/edit the list.
-                    </Typography>
-                    <Box display="flex" gap={2} mt={2} justifyContent="center">
-                        <TextField 
-                            size="small"
-                            type="password" 
-                            label="List Password" 
-                            value={password}
-                            onChange={(e) => {
-                                setPassword(e.target.value);
-                                setError("");
-                            }}
-                            onKeyPress={(e) => e.key === 'Enter' && handleUnlock()}
-                        />
-                        <Button variant="contained" onClick={handleUnlock}>
-                            Unlock
-                        </Button>
-                    </Box>
-                    {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
-                </Paper>
-            </Box>
+            <Paper elevation={0} sx={{ p: 4, textAlign: 'center', border: '1px dashed #cbd5e1', bgcolor: '#f8fafc' }}>
+                <Box sx={{ color: '#94a3b8', mb: 2 }}><LockIcon fontSize="large" /></Box>
+                <Typography variant="h6" color="#334155" gutterBottom>Restricted Access</Typography>
+                <Box display="flex" gap={1} justifyContent="center" mt={2}>
+                    <TextField size="small" type="password" placeholder="List Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <Button variant="contained" onClick={() => fetchGuests(password)} disabled={loading}>
+                        {loading ? "..." : "Unlock"}
+                    </Button>
+                </Box>
+                {error && <Typography color="error" variant="caption" display="block" mt={1}>{error}</Typography>}
+            </Paper>
         );
     }
 
-    // 🔓 UNLOCKED VIEW (Normal List)
-    if (loading) return <Box textAlign="center" mt={4}><CircularProgress /></Box>;
-
+    // 🔓 UNLOCKED TABLE
     return (
-        <Box mt={4}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6" color="primary" fontWeight="bold">
-                    Enrolled Guest List ({guests.length})
-                </Typography>
-                <Button size="small" color="inherit" onClick={() => setIsUnlocked(false)}>
-                    Lock List 🔒
-                </Button>
+        <Paper elevation={3} sx={{ overflow: 'hidden' }}>
+            <Box sx={{ p: 2, bgcolor: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h6" fontWeight="bold">📋 Guest List <Chip label={guests.length} size="small" color="primary" sx={{ ml: 1 }} /></Typography>
+                <Button size="small" onClick={() => setIsUnlocked(false)}>Lock 🔒</Button>
             </Box>
-
-            <TableContainer component={Paper} sx={{ maxHeight: 300, border: '1px solid #ddd' }}>
-                <Table stickyHeader size="small">
+            <TableContainer sx={{ maxHeight: 400 }}>
+                <Table stickyHeader>
                     <TableHead>
                         <TableRow>
-                            <TableCell sx={{ bgcolor: '#f5f5f5' }}><strong>Name</strong></TableCell>
-                            <TableCell sx={{ bgcolor: '#f5f5f5' }}><strong>Phone</strong></TableCell>
-                            <TableCell sx={{ bgcolor: '#f5f5f5' }}><strong>Seat</strong></TableCell>
-                            <TableCell sx={{ bgcolor: '#f5f5f5', textAlign: 'center' }}><strong>Action</strong></TableCell>
+                            <TableCell sx={{ bgcolor: '#f1f5f9', fontWeight: 'bold' }}>Name</TableCell>
+                            <TableCell sx={{ bgcolor: '#f1f5f9', fontWeight: 'bold' }}>Phone</TableCell>
+                            <TableCell sx={{ bgcolor: '#f1f5f9', fontWeight: 'bold' }}>Seat</TableCell>
+                            <TableCell sx={{ bgcolor: '#f1f5f9', fontWeight: 'bold' }} align="right">Actions</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {Array.isArray(guests) && guests.map((guest, index) => (
-                            <TableRow key={index} hover>
-                                <TableCell>{guest.name}</TableCell>
+                        {guests.map((guest, i) => (
+                            <TableRow key={i} hover>
+                                <TableCell><Box display="flex" alignItems="center" gap={1}><PersonIcon color="action" fontSize="small"/> {guest.name}</Box></TableCell>
                                 <TableCell>{guest.phone}</TableCell>
-                                <TableCell>{guest.seat}</TableCell>
-                                <TableCell align="center">
-                                    <Button 
-                                        variant="contained" 
-                                        color="error" 
-                                        size="small"
-                                        onClick={() => handleDelete(guest.name)}
-                                        sx={{ minWidth: '30px', px: 2 }}
-                                    >
-                                        X
-                                    </Button>
+                                <TableCell><Chip label={guest.seat} size="small" color="secondary" variant="outlined" /></TableCell>
+                                <TableCell align="right">
+                                    <IconButton color="error" size="small" onClick={() => handleDelete(guest.name)}>
+                                        <DeleteIcon fontSize="small" />
+                                    </IconButton>
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {guests.length === 0 && (
-                            <TableRow>
-                                <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-                                    No guests found.
-                                </TableCell>
-                            </TableRow>
-                        )}
                     </TableBody>
                 </Table>
             </TableContainer>
-        </Box>
+        </Paper>
     );
 }

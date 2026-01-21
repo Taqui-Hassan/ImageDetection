@@ -1,129 +1,137 @@
 import React, { useState } from 'react';
-import { Container, CssBaseline, Box, Paper, Typography, Divider, Alert, Button, TextField } from '@mui/material';
+import { Container, CssBaseline, Box, Paper, Typography, Divider, Alert, Button, TextField, ThemeProvider, createTheme, Fade } from '@mui/material';
 import FaceCapture from './components/faceCapture';
 import GuestList from './components/guestList';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import LogoutIcon from '@mui/icons-material/Logout';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+
+// ✨ CUSTOM THEME
+const theme = createTheme({
+  palette: {
+    primary: { main: '#6366f1' }, // Modern Indigo
+    secondary: { main: '#ec4899' }, // Pink/Magenta
+    background: { default: '#f3f4f6' }
+  },
+  shape: { borderRadius: 16 }, // Softer corners everywhere
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: { textTransform: 'none', fontWeight: 600, padding: '10px 20px' }
+      }
+    }
+  }
+});
 
 function App() {
-  // --- AUTH STATE ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [error, setError] = useState("");
-
-  // --- APP STATE ---
   const [excelFile, setExcelFile] = useState(null);
   const [status, setStatus] = useState("");
 
-  // 👇 LOGIN FUNCTION
   const handleLogin = () => {
-    
-    if (passwordInput === "admin123") {
-      setIsAuthenticated(true);
-    } else {
-      setError("Incorrect Password");
-    }
+    if (passwordInput === "admin123") setIsAuthenticated(true);
+    else setError("Incorrect Password");
   };
 
   const handleExcelUpload = async () => {
-    if (!excelFile) {
-      setStatus("Please select an Excel file first.");
-      return;
-    }
+    if (!excelFile) { setStatus("Please select an Excel file first."); return; }
     const formData = new FormData();
     formData.append("file", excelFile);
-
     try {
-      setStatus("Uploading and enrolling faces...");
+      setStatus("Uploading...");
       const res = await fetch(`${import.meta.env.VITE_API_URL}/upload-excel`, {
         method: "POST",
         headers: { "ngrok-skip-browser-warning": "true" },
         body: formData,
       });
       const data = await res.json();
-      setStatus(data.status || "Enrollment complete!");
-      
+      setStatus(data.status || "Done!");
       setTimeout(() => window.location.reload(), 2000);
-    } catch (err) {
-      setStatus("Error during enrollment. Make sure Node.js is running.");
-    }
+    } catch (err) { setStatus("Error. Is backend running?"); }
   };
 
-  // 🔒 LOCK SCREEN VIEW (If not logged in)
+  // 🔒 BEAUTIFUL LOGIN SCREEN
   if (!isAuthenticated) {
     return (
-      <Box sx={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', bgcolor: '#f0f2f5' }}>
-        <CssBaseline />
-        <Paper elevation={4} sx={{ p: 5, borderRadius: 3, textAlign: 'center', minWidth: 300 }}>
-          <Typography variant="h5" fontWeight="bold" gutterBottom color="primary">
-            🔒 Admin Access
-          </Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-            Enter password to manage event
-          </Typography>
-          
-          <TextField 
-            fullWidth 
-            type="password" 
-            label="Password" 
-            variant="outlined" 
-            value={passwordInput}
-            onChange={(e) => {
-                setPasswordInput(e.target.value);
-                setError(""); // Clear error when typing
-            }}
-            onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-            sx={{ mb: 2 }}
-          />
-          
-          <Button variant="contained" fullWidth size="large" onClick={handleLogin}>
-            Login
-          </Button>
-
-          {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
-        </Paper>
-      </Box>
+      <ThemeProvider theme={theme}>
+        <Box sx={{ 
+          height: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' // 💜 Purple Gradient
+        }}>
+          <CssBaseline />
+          <Paper elevation={10} sx={{ p: 5, width: 350, textAlign: 'center', bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)' }}>
+            <Box sx={{ bgcolor: '#e0e7ff', width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
+                <LockOpenIcon color="primary" fontSize="large" />
+            </Box>
+            <Typography variant="h5" fontWeight="800" color="#333" gutterBottom>Welcome Back</Typography>
+            <Typography variant="body2" color="textSecondary" mb={3}>Enter your credentials to access the Event Manager</Typography>
+            
+            <TextField fullWidth type="password" label="Admin Password" variant="outlined" 
+              value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setError(""); }}
+              onKeyPress={(e) => e.key === 'Enter' && handleLogin()} sx={{ mb: 3 }}
+            />
+            
+            <Button variant="contained" fullWidth size="large" onClick={handleLogin} sx={{ boxShadow: '0 4px 14px 0 rgba(99, 102, 241, 0.39)' }}>
+              Access Dashboard
+            </Button>
+            {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+          </Paper>
+        </Box>
+      </ThemeProvider>
     );
   }
 
-  // 🔓 MAIN APP VIEW (If logged in)
+  // 🔓 MAIN DASHBOARD
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#f0f2f5' }}>
-      <CssBaseline />
-      <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-        <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h4" align="center" color="primary" fontWeight="bold">
-              Smart Event Manager
+    <ThemeProvider theme={theme}>
+      <Box sx={{ minHeight: '100vh', bgcolor: '#f8fafc', pb: 5 }}>
+        <CssBaseline />
+        
+        {/* HEADER */}
+        <Box sx={{ bgcolor: '#fff', py: 2, px: 4, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h5" fontWeight="800" sx={{ background: '-webkit-linear-gradient(45deg, #6366f1, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                Event Manager AI
             </Typography>
-            {/* LOGOUT BUTTON */}
-            <Button color="inherit" onClick={() => setIsAuthenticated(false)}>Logout</Button>
-          </Box>
+            <Button startIcon={<LogoutIcon />} color="error" onClick={() => setIsAuthenticated(false)}>Logout</Button>
+        </Box>
 
-          {/* ADMIN ENROLLMENT */}
-          <Box sx={{ mb: 4, p: 2, bgcolor: '#e3f2fd', borderRadius: 2 }}>
-            <Typography variant="h6" gutterBottom>Step 1: Admin Enrollment</Typography>
-            <Box display="flex" alignItems="center" gap={2}>
-              <input type="file" accept=".xlsx, .xls" onChange={(e) => setExcelFile(e.target.files[0])} style={{ flexGrow: 1 }} />
-              <Button variant="contained" color="secondary" onClick={handleExcelUpload}>Enroll Guests</Button>
-            </Box>
-            {status && <Alert sx={{ mt: 2 }} severity={status.includes("Error") ? "error" : "info"}>{status}</Alert>}
-          </Box>
+        <Container maxWidth="md" sx={{ mt: 5 }}>
+            <Fade in={true} timeout={800}>
+                <Box>
+                    {/* SECTION 1: UPLOAD */}
+                    <Paper sx={{ p: 4, mb: 4, position: 'relative', overflow: 'hidden' }}>
+                        <Box sx={{ position: 'absolute', top: 0, left: 0, width: '6px', height: '100%', bgcolor: '#6366f1' }} />
+                        <Typography variant="h6" fontWeight="bold" gutterBottom>📂 Import Guest List</Typography>
+                        <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                            <Button component="label" variant="outlined" startIcon={<UploadFileIcon />} sx={{ flexGrow: 1, py: 1.5, borderStyle: 'dashed' }}>
+                                {excelFile ? excelFile.name : "Select Excel File"}
+                                <input type="file" hidden accept=".xlsx, .xls" onChange={(e) => setExcelFile(e.target.files[0])} />
+                            </Button>
+                            <Button variant="contained" onClick={handleExcelUpload} disabled={!excelFile} sx={{ px: 4 }}>
+                                Upload
+                            </Button>
+                        </Box>
+                        {status && <Alert sx={{ mt: 2 }} severity={status.includes("Error") ? "error" : "success"}>{status}</Alert>}
+                    </Paper>
 
-          <Divider sx={{ mb: 4 }} />
+                    {/* SECTION 2: CAMERA */}
+                    <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ ml: 1, color: '#64748b' }}>Live Scanner</Typography>
+                    <FaceCapture />
 
-          {/* LIVE RECOGNITION */}
-          <Box mb={4}>
-            <Typography variant="h6" align="center" gutterBottom>Step 2: Guest Recognition</Typography>
-            <FaceCapture />
-          </Box>
+                    <Divider sx={{ my: 6, opacity: 0.5 }}>OR</Divider>
 
-          <Divider sx={{ mb: 4 }} />
-
-          {/* GUEST LIST VIEW */}
-          <GuestList />
-          
-        </Paper>
-      </Container>
-    </Box>
+                    {/* SECTION 3: LIST */}
+                    <GuestList />
+                </Box>
+            </Fade>
+        </Container>
+      </Box>
+    </ThemeProvider>
   );
 }
 
