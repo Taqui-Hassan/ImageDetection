@@ -1,9 +1,9 @@
 import { useRef, useState, useEffect } from "react";
-import { Button, Box, CircularProgress, Typography, Paper, Fade, IconButton } from "@mui/material";
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningIcon from '@mui/icons-material/Warning';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 
 export default function FaceCapture() {
   const videoRef = useRef(null);
@@ -48,73 +48,76 @@ export default function FaceCapture() {
   };
 
   return (
-    <Paper sx={{ p: 2, bgcolor: '#000', borderRadius: 4, overflow: 'hidden', position: 'relative', border: '1px solid #334155' }}>
-        {/* HEADER */}
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} px={1}>
-            <Box display="flex" alignItems="center" gap={1}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#ef4444', animation: 'pulse 2s infinite' }} />
-                <Typography variant="h6" color="textSecondary" fontSize="0.75rem">LIVE FEED // REC</Typography>
-            </Box>
-            <IconButton size="small" onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")} sx={{ color: '#94a3b8', border: '1px solid #334155' }}>
+    <div className="bg-black border border-slate-700 rounded-xl p-4 shadow-2xl relative overflow-hidden">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-4 px-2">
+            <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${loading ? 'bg-blue-500 animate-pulse' : 'bg-red-500 animate-ping'}`}></div>
+                <span className="text-xs font-bold text-slate-400 tracking-widest">
+                    {loading ? "TRANSMITTING DATA..." : "LIVE FEED // REC"}
+                </span>
+            </div>
+            <button onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")} className="text-slate-500 hover:text-white transition-colors">
                 <CameraswitchIcon fontSize="small" />
-            </IconButton>
-        </Box>
+            </button>
+        </div>
 
-        {/* VIEWFINDER */}
-        <Box sx={{ position: 'relative', borderRadius: 3, overflow: 'hidden', bgcolor: '#0f172a', aspectRatio: '4/3' }}>
-            <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover", transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }} />
+        {/* Viewfinder */}
+        <div className="relative rounded-lg overflow-hidden bg-slate-900 border-2 border-slate-800 aspect-4/3 group">
+            <video ref={videoRef} autoPlay playsInline className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
             
-            {/* SCANNING OVERLAY */}
+            {/* Overlay Grid */}
+            <div className="absolute inset-0 border border-slate-500/20 m-4 rounded pointer-events-none"></div>
+            
+            {/* Scanning Animation (Only when sending) */}
             {loading && (
-                <Box sx={{
-                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                    background: 'linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.5), transparent)',
-                    animation: 'scan 1.2s linear infinite',
-                    '@keyframes scan': { '0%': { transform: 'translateY(-100%)' }, '100%': { transform: 'translateY(100%)' } }
-                }} />
+                <div className="absolute inset-0 z-10">
+                    <div className="absolute inset-0 bg-blue-500/10 animate-pulse"></div>
+                    <div className="absolute inset-0 bg-linear-to-b from-transparent via-blue-400/30 to-transparent animate-[scan_1.5s_linear_infinite] border-b-2 border-blue-400"></div>
+                </div>
             )}
-            
-            {/* CORNER BRACKETS */}
-            <Box sx={{ position: 'absolute', top: 20, left: 20, width: 40, height: 40, borderTop: '2px solid rgba(255,255,255,0.3)', borderLeft: '2px solid rgba(255,255,255,0.3)' }} />
-            <Box sx={{ position: 'absolute', top: 20, right: 20, width: 40, height: 40, borderTop: '2px solid rgba(255,255,255,0.3)', borderRight: '2px solid rgba(255,255,255,0.3)' }} />
-            <Box sx={{ position: 'absolute', bottom: 20, left: 20, width: 40, height: 40, borderBottom: '2px solid rgba(255,255,255,0.3)', borderLeft: '2px solid rgba(255,255,255,0.3)' }} />
-            <Box sx={{ position: 'absolute', bottom: 20, right: 20, width: 40, height: 40, borderBottom: '2px solid rgba(255,255,255,0.3)', borderRight: '2px solid rgba(255,255,255,0.3)' }} />
-        </Box>
-        <canvas ref={canvasRef} style={{ display: "none" }} />
+        </div>
+        <canvas ref={canvasRef} className="hidden" />
 
-        {/* CONTROLS */}
-        <Box mt={2}>
-            <Button fullWidth variant="contained" size="large" onClick={recognizeFace} disabled={loading} startIcon={!loading && <CameraAltIcon />}
-                sx={{ py: 2, bgcolor: '#fff', color: '#000', '&:hover': { bgcolor: '#e2e8f0' } }}>
-                {loading ? "PROCESSING..." : "CAPTURE"}
-            </Button>
-        </Box>
-
-        {/* TECH RESULT CARD */}
-        {result && (
-            <Fade in={true}>
-                <Box sx={{ mt: 2, p: 2, borderRadius: 2, bgcolor: result.status === 'matched' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: `1px solid ${result.status === 'matched' ? '#10b981' : '#ef4444'}` }}>
-                    <Box display="flex" alignItems="center" gap={2}>
-                        {result.status === 'matched' ? <CheckCircleIcon sx={{ color: '#10b981' }} /> : <WarningIcon sx={{ color: '#ef4444' }} />}
-                        <Box>
-                            <Typography variant="subtitle2" sx={{ color: result.status === 'matched' ? '#10b981' : '#ef4444', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                                {result.status === 'matched' ? 'IDENTITY VERIFIED' : 'NO MATCH FOUND'}
-                            </Typography>
-                            {result.name && (
-                                <Typography variant="h5" color="white" fontWeight="bold">
-                                    {result.name}
-                                </Typography>
-                            )}
-                            {result.seat && (
-                                <Typography variant="body2" sx={{ color: '#94a3b8', fontFamily: 'monospace', mt: 0.5 }}>
-                                    SEAT ASSIGNMENT: <span style={{ color: '#fff' }}>{result.seat}</span>
-                                </Typography>
-                            )}
-                        </Box>
-                    </Box>
-                </Box>
-            </Fade>
+        {/* Status Message (The Relief Message) */}
+        {loading && (
+            <div className="mt-3 flex items-center justify-center gap-2 text-blue-400 animate-pulse">
+                <CloudUploadIcon fontSize="small" />
+                <span className="text-xs font-bold tracking-wider">SENDING TO AI ENGINE...</span>
+            </div>
         )}
-    </Paper>
+
+        {/* Capture Button */}
+        <div className="mt-4">
+            <button 
+                onClick={recognizeFace} 
+                disabled={loading}
+                className={`w-full font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 ${
+                    loading 
+                    ? 'bg-slate-800 text-slate-400 cursor-wait border border-slate-700' 
+                    : 'bg-white text-black hover:bg-slate-200'
+                }`}
+            >
+                {loading ? "SENDING..." : <><CameraAltIcon /> CAPTURE</>}
+            </button>
+        </div>
+
+        {/* Result Card */}
+        {result && (
+            <div className={`mt-4 p-4 rounded-lg border ${result.status === 'matched' ? 'bg-green-500/10 border-green-500/50' : 'bg-red-500/10 border-red-500/50'} animate-fade-in`}>
+                <div className="flex items-start gap-3">
+                    {result.status === 'matched' ? <CheckCircleIcon className="text-green-500" /> : <WarningIcon className="text-red-500" />}
+                    <div>
+                        <h4 className={`text-sm font-bold uppercase ${result.status === 'matched' ? 'text-green-500' : 'text-red-500'}`}>
+                            {result.status === 'matched' ? 'IDENTITY VERIFIED' : 'NO MATCH FOUND'}
+                        </h4>
+                        {result.name && <p className="text-xl font-bold text-white mt-1">{result.name}</p>}
+                        {result.seat && <p className="text-sm text-slate-400 font-mono">SEAT: <span className="text-white">{result.seat}</span></p>}
+                        {result.messageSent && <p className="text-[10px] text-green-400 mt-1 uppercase tracking-wide">✔ WhatsApp Sent</p>}
+                    </div>
+                </div>
+            </div>
+        )}
+    </div>
   );
 }
