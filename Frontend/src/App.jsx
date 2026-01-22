@@ -19,7 +19,7 @@ function App() {
   const [uploadStatus, setUploadStatus] = useState("");
 
   const handleLogin = () => {
-    const correctPassword = import.meta.env.VITE_API_LOGIN_PASSWORD;
+    const correctPassword = import.meta.env.VITE_APP_LOGIN_PASSWORD;
     if (passwordInput === correctPassword) setIsAuthenticated(true);
     else alert("Access Denied");
   };
