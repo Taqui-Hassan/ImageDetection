@@ -57,7 +57,7 @@ export default function SystemStatus() {
                     <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(status.qr)}`} 
                         alt="Scan QR" 
-                        className="w-20 h-20" 
+                        className="w-60 h-60" 
                     />
                 </div>
             )}
