@@ -9,10 +9,14 @@ import { fileURLToPath } from "url";
 import FormData from 'form-data';
 import qrcodeTerminal from 'qrcode-terminal';
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth, MessageMedia } = pkg;
+import dotenv from 'dotenv';
 
+
+dotenv.config();
+const { Client, LocalAuth, MessageMedia } = pkg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 
 const app = express();
 app.use(cors());
@@ -20,8 +24,9 @@ app.use(express.json({ limit: '50mb' }));
 
 // --- CONFIGURATION ---
 const CONFIG = {
-    PORT: 8000,
-    PYTHON_SERVICE_URL: 'https://event-ai-service.onrender.com',
+    PORT: process.env.PORT || 8000,
+    PYTHON_SERVICE_URL: process.env.PYTHON_SERVICE_URL, 
+    GUEST_LIST_PASSWORD: process.env.GUEST_LIST_PASSWORD,
 };
 
 // --- DIRECTORIES ---
@@ -109,10 +114,10 @@ app.get("/system-status", async (req, res) => {
 
 // 2. GET GUESTS (SECURED)
 app.get("/guests", (req, res) => {
-    // 👇 SECURITY CHECK
+  
     const adminPassword = req.headers['x-admin-password'];
-    if (adminPassword !== "list2024") {
-       // return res.status(403).json({ error: "Wrong Password" }); // Uncomment to lock
+    if (adminPassword !== CONFIG.GUEST_LIST_PASSWORD) {
+       return res.status(403).json({ error: "Wrong Password" }); 
     }
 
     try {
@@ -178,7 +183,7 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
             const cleanPhone = formatPhoneNumber(guestData.phone);
             const seatNumber = guestData.seat || "Assigned on arrival";
             const chatId = `${cleanPhone}@c.us`;
-            const caption = `🎉 Welcome ${foundName}!\n\n📍 *Your Seat Number is: ${seatNumber}*\n\nEnjoy the event! 🚀`;
+            const caption = `Dear ${foundName} San\n\n📍 *Your Seat Number is: ${seatNumber}*\n\nEnjoy the event`;
 
             try {
                 const media = MessageMedia.fromFilePath(filePath);
