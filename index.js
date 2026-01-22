@@ -4,7 +4,7 @@ import multer from "multer";
 import xlsx from "xlsx";
 import fs from "fs";
 import path from "path";
-import fetch from "node-fetch"; 
+import fetch from "node-fetch";
 import { fileURLToPath } from "url";
 import FormData from 'form-data';
 import qrcodeTerminal from 'qrcode-terminal';
@@ -44,7 +44,7 @@ const client = new Client({
     puppeteer: {
         headless: true,
         args: [
-            '--no-sandbox', 
+            '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--disable-accelerated-2d-canvas',
@@ -90,7 +90,7 @@ async function getMediaFromUrl(url) {
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to fetch ${url}`);
-        
+
         const contentType = response.headers.get('content-type') || 'image/jpeg';
         const buffer = await response.buffer();
         const base64 = buffer.toString('base64');
@@ -124,11 +124,17 @@ app.get("/system-status", async (req, res) => {
 
 // 2. GET GUESTS
 app.get("/guests", (req, res) => {
+    // 👇 THIS IS THE MISSING PASSWORD CHECK
+    const adminPassword = req.headers['x-admin-password'];
+    if (adminPassword !== "list2024") {
+        return res.status(403).json({ error: "Wrong Password" });
+    }
+    // 👆 END CHEC
     try {
         if (fs.existsSync(META_FILE)) {
             const meta = JSON.parse(fs.readFileSync(META_FILE));
-            const guests = Object.keys(meta).map(name => ({ 
-                name, 
+            const guests = Object.keys(meta).map(name => ({
+                name,
                 phone: meta[name].phone,
                 seat: meta[name].seat || "N/A"
             }));
@@ -206,7 +212,7 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
         const workbook = xlsx.readFile(tempFilePath);
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows = xlsx.utils.sheet_to_json(sheet);
-        
+
         let meta = JSON.parse(fs.readFileSync(META_FILE));
         let enrolled = 0;
 
@@ -220,7 +226,7 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
                 enrolled++;
             }
         }
-        
+
         fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
         res.json({ status: "success", enrolled });
     } catch (err) {
@@ -251,7 +257,7 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
             const name = row.Name?.toString().trim();
             const phone = row.Phone?.toString().trim();
             const seat = row.Seat || row["Seat Number"] || "General";
-            
+
             // Read Image URL from Excel
             const imageUrl = row.ImageURL || row["Image URL"] || row.imageurl;
 
@@ -259,14 +265,14 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
                 try {
                     const cleanPhone = formatPhoneNumber(phone);
                     const chatId = `${cleanPhone}@c.us`;
-                    
+
                     const message = `👋 Hello ${name}!\n\n🎟️ Welcome to the event.\n📍 *Your Seat Number is: ${seat}*\n\nPlease proceed to your seat.`;
 
                     // Smart Download Logic
                     if (imageUrl && imageUrl.startsWith('http')) {
                         console.log(`⬇️ Downloading image for ${name}...`);
                         const media = await getMediaFromUrl(imageUrl);
-                        
+
                         if (media) {
                             await client.sendMessage(chatId, media, { caption: message });
                             console.log(`✅ Sent URL IMAGE + Text to ${name}`);

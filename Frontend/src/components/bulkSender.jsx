@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Box, Paper, Typography, Button, LinearProgress, Alert, Fade } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import TerminalIcon from '@mui/icons-material/Terminal';
@@ -26,51 +25,94 @@ export default function BulkSender({ onBack }) {
     };
 
     return (
-        <Fade in={true}>
-            <Box>
-                <Button onClick={onBack} sx={{ mb: 2, color: '#94a3b8' }}>&larr; RETURN TO MODULES</Button>
-                <Paper sx={{ p: 4, bgcolor: '#0f172a', border: '1px solid #334155' }}>
-                    <Box display="flex" alignItems="center" gap={2} mb={3}>
-                        <Box p={1} bgcolor="rgba(16, 185, 129, 0.1)" borderRadius="50%" color="#10b981"><TerminalIcon /></Box>
-                        <Box>
-                            <Typography variant="h6" color="white">DIRECT BROADCAST PROTOCOL</Typography>
-                            <Typography variant="body2" color="textSecondary">Mass messaging via Excel + Image URLs.</Typography>
-                        </Box>
-                    </Box>
+        <div className="animate-fade-in">
+            <button onClick={onBack} className="mb-4 text-slate-400 hover:text-white transition-colors">
+                 ← Return to Modules
+            </button>
 
-                    {/* UPLOAD AREA WITH GUIDE */}
-                    <Box sx={{ border: '2px dashed #334155', borderRadius: 2, p: 3, mb: 3, bgcolor: '#1e293b' }}>
-                        <Box textAlign="center" mb={2}>
-                            <Button component="label" startIcon={<UploadFileIcon />} sx={{ color: '#fff', fontSize: '1.1rem' }}>
-                                {file ? file.name : "SELECT EXCEL LIST"}
-                                <input type="file" hidden accept=".xlsx, .xls" onChange={(e) => setFile(e.target.files[0])} />
-                            </Button>
-                        </Box>
-                        <Box display="flex" justifyContent="center" gap={1} flexWrap="wrap">
-                            <Typography variant="caption" color="textSecondary" sx={{ mr: 1 }}>COLUMNS:</Typography>
-                            {['Name', 'Phone','ImageURL', 'Seat' ].map(h => (
-                                <code key={h} style={{ background: '#0f172a', padding: '2px 8px', borderRadius: '4px', color: '#6366f1', fontSize: '0.75rem', border: '1px solid #334155' }}>{h}</code>
+            <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-2xl">
+                {/* Header */}
+                <div className="p-6 border-b border-slate-700 bg-slate-800/50 flex items-center gap-3">
+                    <div className="p-2 bg-green-500/10 rounded-full text-green-500">
+                        <TerminalIcon />
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-bold text-white">Direct Broadcast Protocol</h2>
+                        <p className="text-xs text-slate-400">Mass messaging engine. Excel + Image URL support.</p>
+                    </div>
+                </div>
+
+                <div className="p-6">
+                    {/* Upload Area */}
+                    <div className="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center bg-slate-900/50 mb-6 hover:border-green-500/50 transition-colors">
+                        <label className="cursor-pointer inline-flex flex-col items-center gap-2 group">
+                            <UploadFileIcon className="text-slate-400 group-hover:text-white transition-colors" style={{ fontSize: 40 }} />
+                            <span className="text-sm font-medium text-slate-300 group-hover:text-white">
+                                {file ? file.name : "Click to Upload Excel List"}
+                            </span>
+                            <input type="file" hidden accept=".xlsx, .xls" onChange={(e) => setFile(e.target.files[0])} />
+                        </label>
+                        
+                        {/* Format Guide */}
+                        <div className="mt-4 flex flex-wrap justify-center gap-2">
+                            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mt-1">Format:</span>
+                            {['Name', 'Phone', 'Seat', 'ImageURL'].map(h => (
+                                <span key={h} className="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded border border-slate-700 font-mono">
+                                    {h}
+                                </span>
                             ))}
-                        </Box>
-                    </Box>
+                        </div>
+                    </div>
 
-                    {loading && <LinearProgress sx={{ mb: 3, bgcolor: '#334155', '& .MuiLinearProgress-bar': { bgcolor: '#10b981' } }} />}
-
-                    <Button fullWidth variant="contained" size="large" onClick={handleBlast} disabled={!file || loading}
-                        startIcon={<SendIcon />}
-                        sx={{ bgcolor: '#10b981', py: 2, fontWeight: 'bold', letterSpacing: 1, '&:hover': { bgcolor: '#059669' }, '&:disabled': { bgcolor: '#334155', color: '#64748b' } }}>
-                        {loading ? "TRANSMITTING..." : "INITIATE BROADCAST"}
-                    </Button>
-
-                    {report && (
-                        <Box mt={3}>
-                            <Alert severity={report.status === 'success' ? "success" : "error"} variant="outlined">
-                                {report.status === 'success' ? `DONE: Sent ${report.sent}/${report.total} messages.` : report.message}
-                            </Alert>
-                        </Box>
+                    {loading && (
+                        <div className="mb-6">
+                            <div className="h-2 w-full bg-slate-700 rounded-full overflow-hidden">
+                                <div className="h-full bg-green-500 animate-progress w-full origin-left"></div>
+                            </div>
+                            <p className="text-xs text-green-500 mt-2 text-center font-mono">TRANSMITTING DATA PACKETS...</p>
+                        </div>
                     )}
-                </Paper>
-            </Box>
-        </Fade>
+
+                    <button 
+                        onClick={handleBlast} 
+                        disabled={!file || loading}
+                        className="w-full bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
+                    >
+                        {loading ? "SENDING..." : (
+                            <>
+                                <SendIcon fontSize="small" /> INITIATE BROADCAST
+                            </>
+                        )}
+                    </button>
+
+                    {/* Report Card */}
+                    {report && (
+                        <div className={`mt-6 p-4 rounded-lg border ${report.status === 'success' ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                            {report.status === 'success' ? (
+                                <div>
+                                    <h4 className="text-green-400 font-bold mb-1">MISSION COMPLETE</h4>
+                                    <div className="grid grid-cols-3 gap-4 text-center mt-2">
+                                        <div className="bg-slate-900/50 p-2 rounded">
+                                            <div className="text-xl font-bold text-white">{report.total}</div>
+                                            <div className="text-[10px] text-slate-400 uppercase">Targeted</div>
+                                        </div>
+                                        <div className="bg-slate-900/50 p-2 rounded">
+                                            <div className="text-xl font-bold text-green-400">{report.sent}</div>
+                                            <div className="text-[10px] text-slate-400 uppercase">Sent</div>
+                                        </div>
+                                        <div className="bg-slate-900/50 p-2 rounded">
+                                            <div className="text-xl font-bold text-red-400">{report.failed}</div>
+                                            <div className="text-[10px] text-slate-400 uppercase">Failed</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-red-400 font-mono text-sm">ERROR: {report.message}</p>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
     );
 }

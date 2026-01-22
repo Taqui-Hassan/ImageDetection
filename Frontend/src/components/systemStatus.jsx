@@ -1,103 +1,66 @@
 import React, { useState, useEffect } from 'react';
-import { Paper, Box, Typography, Chip, CircularProgress, Fade } from '@mui/material';
 import WifiIcon from '@mui/icons-material/Wifi';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import BatteryChargingFullIcon from '@mui/icons-material/BatteryChargingFull';
-import QrCodeIcon from '@mui/icons-material/QrCode';
 
 export default function SystemStatus() {
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // Poll status every 3 seconds
     useEffect(() => {
         const checkStatus = async () => {
             try {
-                const res = await fetch(`${import.meta.env.VITE_API_URL}/system-status`, {
-                    headers: { "ngrok-skip-browser-warning": "true" }
-                });
+                const res = await fetch(`${import.meta.env.VITE_API_URL}/system-status`, { headers: { "ngrok-skip-browser-warning": "true" } });
                 const data = await res.json();
                 setStatus(data);
-            } catch (err) {
-                console.error("Status check failed");
-            } finally {
-                setLoading(false);
-            }
+            } catch (err) {} finally { setLoading(false); }
         };
-
-        checkStatus(); // Initial run
-        const interval = setInterval(checkStatus, 3000); // Loop
+        checkStatus();
+        const interval = setInterval(checkStatus, 3000);
         return () => clearInterval(interval);
     }, []);
 
     if (loading || !status) return null;
 
     return (
-        <Fade in={true}>
-            <Paper sx={{ 
-                p: 2, 
-                mb: 4, 
-                border: '1px solid #334155', 
-                bgcolor: '#0f172a', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: 2
-            }}>
-                {/* LEFT: Connection Status */}
-                <Box display="flex" alignItems="center" gap={2}>
-                    <Box sx={{ position: 'relative' }}>
-                        {status.whatsapp 
-                            ? <WifiIcon sx={{ color: '#10b981', fontSize: 30 }} /> 
-                            : <WifiOffIcon sx={{ color: '#ef4444', fontSize: 30 }} />
-                        }
-                        <Box sx={{ 
-                            position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', 
-                            bgcolor: status.whatsapp ? '#10b981' : '#ef4444', 
-                            boxShadow: `0 0 10px ${status.whatsapp ? '#10b981' : '#ef4444'}` 
-                        }} />
-                    </Box>
-                    <Box>
-                        <Typography variant="subtitle2" color="white" fontWeight="bold">
-                            WHATSAPP LINK
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: status.whatsapp ? '#10b981' : '#ef4444' }}>
-                            {status.whatsapp ? `CONNECTED: ${status.user}` : "DISCONNECTED"}
-                        </Typography>
-                    </Box>
-                </Box>
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-8 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
+            
+            {/* Left: Connection */}
+            <div className="flex items-center gap-4 w-full md:w-auto">
+                <div className="relative">
+                    {status.whatsapp 
+                        ? <WifiIcon className="text-green-500" style={{ fontSize: 32 }} /> 
+                        : <WifiOffIcon className="text-red-500" style={{ fontSize: 32 }} />
+                    }
+                    <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${status.whatsapp ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`}></span>
+                </div>
+                <div>
+                    <h4 className="text-sm font-bold text-white tracking-wide">WHATSAPP LINK</h4>
+                    <p className={`text-xs font-mono ${status.whatsapp ? 'text-green-400' : 'text-red-400'}`}>
+                        {status.whatsapp ? `CONNECTED: ${status.user}` : "DISCONNECTED"}
+                    </p>
+                </div>
+            </div>
 
-                {/* MIDDLE: Battery (If connected) */}
-                {status.whatsapp && status.battery && (
-                    <Chip 
-                        icon={<BatteryChargingFullIcon />} 
-                        label={`${status.battery.battery}% Phone Battery`} 
-                        variant="outlined" 
-                        sx={{ color: '#94a3b8', borderColor: '#334155' }} 
+            {/* Middle: Battery */}
+            {status.whatsapp && status.battery && (
+                <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-700">
+                    <BatteryChargingFullIcon className="text-yellow-500" fontSize="small" />
+                    <span className="text-xs font-medium text-slate-300">{status.battery.battery}% Battery</span>
+                </div>
+            )}
+
+            {/* Right: QR Code */}
+            {!status.whatsapp && status.qr && (
+                <div className="bg-white p-2 rounded-lg shadow-inner">
+                    <p className="text-[10px] text-center text-black font-bold mb-1">SCAN ME</p>
+                    <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(status.qr)}`} 
+                        alt="Scan QR" 
+                        className="w-20 h-20" 
                     />
-                )}
-
-                {/* RIGHT: QR Code (If disconnected) */}
-                {!status.whatsapp && status.qr && (
-                    <Box sx={{ textAlign: 'center', bgcolor: '#fff', p: 1, borderRadius: 2 }}>
-                        <Typography variant="caption" color="black" display="block" mb={0.5}>SCAN ME</Typography>
-                        {/* Use free API to render QR */}
-                        <img 
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(status.qr)}`} 
-                            alt="Scan QR" 
-                            style={{ width: 100, height: 100 }} 
-                        />
-                    </Box>
-                )}
-                
-                {!status.whatsapp && !status.qr && (
-                     <Box display="flex" alignItems="center" gap={1} color="#f59e0b">
-                        <CircularProgress size={16} color="inherit" />
-                        <Typography variant="caption">INITIALIZING CLIENT...</Typography>
-                     </Box>
-                )}
-            </Paper>
-        </Fade>
+                </div>
+            )}
+        </div>
     );
 }
