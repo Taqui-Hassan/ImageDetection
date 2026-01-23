@@ -121,7 +121,7 @@ function App() {
                 <div className="p-3 bg-green-500/10 rounded-full mb-4 group-hover:scale-110 transition-transform">
                     <CellTowerIcon className="text-green-500" style={{ fontSize: 36 }} />
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">Direct Blast</h3>
+                <h3 className="text-xl font-bold text-white mb-2">Direct Messages</h3>
                 <p className="text-slate-400 text-sm leading-relaxed">Mass broadcast via Excel. Supports auto-image downloading from URLs.</p>
               </div>
 
