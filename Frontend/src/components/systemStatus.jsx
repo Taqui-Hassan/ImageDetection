@@ -42,13 +42,7 @@ export default function SystemStatus() {
                 </div>
             </div>
 
-            {/* Middle: Battery */}
-            {status.whatsapp && status.battery && (
-                <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-700">
-                    <BatteryChargingFullIcon className="text-yellow-500" fontSize="small" />
-                    <span className="text-xs font-medium text-slate-300">{status.battery.battery}% Battery</span>
-                </div>
-            )}
+            
 
             {/* Right: QR Code */}
             {!status.whatsapp && status.qr && (
