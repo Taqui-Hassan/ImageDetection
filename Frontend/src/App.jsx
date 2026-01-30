@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import axios from 'axios';
-import GuestList from './components/GuestList';
+import GuestList from './components/guestList';
 import UploadExcel from './components/UploadExcel';
 import AddGuest from './components/AddGuest'; // (If you have this component)
 
@@ -185,7 +185,7 @@ export default function App() {
         )}
 
         {/* === OTHER TABS === */}
-        {activeTab === 'guests' && <GuestList />}
+        {activeTab === 'guests' && <guestList />}
         {activeTab === 'upload' && <UploadExcel />}
       </main>
     </div>
