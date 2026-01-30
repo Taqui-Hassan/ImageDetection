@@ -2,7 +2,7 @@ import React, { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import axios from 'axios';
 
-// --- IMPORTS (Matches your file structure) ---
+// --- IMPORTS ---
 import GuestList from './components/guestList'; 
 import UploadExcel from './components/UploadExcel'; 
 import BulkSender from './components/bulkSender';
@@ -18,6 +18,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import SendIcon from '@mui/icons-material/Send';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ListAltIcon from '@mui/icons-material/ListAlt';
+import CameraswitchIcon from '@mui/icons-material/Cameraswitch'; // 👈 NEW ICON
 
 export default function App() {
   // --- AUTH STATE ---
@@ -30,12 +31,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('scan');
   const [scanResult, setScanResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  
+  // 👇 CAMERA FLIP STATE (Restored)
+  const [facingMode, setFacingMode] = useState("environment");
 
-  // --- LOGIN HANDLER (UPDATED) ---
+  // --- LOGIN HANDLER ---
   const handleLogin = (e) => {
     e.preventDefault();
-    
-    // 👇 USING ENV VARIABLE FOR DASHBOARD LOGIN
     const appPassword = import.meta.env.VITE_APP_LOGIN_PASSWORD;
 
     if (!appPassword) {
@@ -52,7 +54,12 @@ export default function App() {
     }
   };
 
-  // --- CAMERA HANDLER ---
+  // --- TOGGLE CAMERA FUNCTION ---
+  const toggleCamera = useCallback(() => {
+    setFacingMode(prev => prev === "user" ? "environment" : "user");
+  }, []);
+
+  // --- CAPTURE HANDLER ---
   const capture = useCallback(async () => {
     const imageSrc = webcamRef.current.getScreenshot();
     if (!imageSrc) return;
@@ -65,7 +72,6 @@ export default function App() {
     formData.append('image', blob, 'capture.jpg');
 
     try {
-      // Ensure backend URL is also from ENV
       const res = await axios.post(`${import.meta.env.VITE_API_URL}/recognize-guest`, formData, {
         headers: { 
             'Content-Type': 'multipart/form-data',
@@ -129,7 +135,9 @@ export default function App() {
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <span className="font-bold text-white">E</span>
+              </div>
               <div>
                 <h1 className="font-bold text-sm sm:text-base leading-none">Entry OS</h1>
                 <SystemStatus /> 
@@ -162,13 +170,14 @@ export default function App() {
             {/* CAMERA STATE */}
             {!scanResult && (
               <>
-                <div className="bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative aspect-[4/3] sm:aspect-video">
+                <div className="bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative aspect-[4/3] sm:aspect-video group">
                   <Webcam
                     audio={false}
                     ref={webcamRef}
                     screenshotFormat="image/jpeg"
                     className="w-full h-full object-cover"
-                    videoConstraints={{ facingMode: "environment" }} 
+                    // 👇 UPDATED TO USE STATE VARIABLE
+                    videoConstraints={{ facingMode: facingMode }} 
                   />
                   
                   {/* Scanner Overlay */}
@@ -179,6 +188,16 @@ export default function App() {
                       <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-blue-400 -mb-1 -ml-1"></div>
                       <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-blue-400 -mb-1 -mr-1"></div>
                     </div>
+                  </div>
+
+                  {/* 👇 FLIP CAMERA BUTTON (Top Right) 👇 */}
+                  <div className="absolute top-4 right-4 z-10">
+                    <button 
+                        onClick={toggleCamera}
+                        className="bg-black/50 hover:bg-black/80 text-white p-3 rounded-full backdrop-blur-sm border border-white/10 transition-all shadow-lg"
+                    >
+                        <CameraswitchIcon />
+                    </button>
                   </div>
                 </div>
 
