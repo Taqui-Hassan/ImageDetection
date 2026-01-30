@@ -55,7 +55,7 @@ def recognize():
             print(f"🔍 Found: {name} | Distance: {distance:.4f}")
 
             # TUNING: ArcFace is strict. 0.68 is standard, 0.75 is more relaxed.
-            if distance < 0.75:
+            if distance < 0.60:
                 phone = None
                 if os.path.exists(META_FILE):
                     with open(META_FILE, 'r') as f:

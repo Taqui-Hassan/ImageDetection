@@ -1,30 +1,72 @@
 {
   "Khalid": {
     "phone": "918882544655",
-    "seat": "210"
+    "seat": "210",
+    "entered": false
   },
   "Taqui": {
     "phone": "918800918266",
-    "seat": "211"
-  },
-  "Ariba": {
-    "phone": "918882544655",
-    "seat": "222"
-  },
-  "Bose": {
-    "phone": "918882544655",
-    "seat": "509"
-  },
-  "Venkat": {
-    "phone": "918882544655",
-    "seat": "510"
-  },
-  "Naveen": {
-    "phone": "918882544655",
-    "seat": "522"
+    "seat": "211",
+    "entered": true
   },
   "Hardayal": {
-    "phone": "918882544655",
-    "seat": "600"
+    "phone": "919988251524",
+    "seat": "100",
+    "entered": false
+  },
+  "Ashish": {
+    "phone": "918447097602",
+    "seat": "200",
+    "entered": false
+  },
+  "Vikas": {
+    "phone": "918510904265",
+    "seat": "300",
+    "entered": false
+  },
+  "Shivam": {
+    "phone": "919999840400",
+    "seat": "400",
+    "entered": false
+  },
+  "Ashwini": {
+    "phone": "917408477772",
+    "seat": "500",
+    "entered": false
+  },
+  "Venkat": {
+    "phone": "919911455935",
+    "seat": "600",
+    "entered": false
+  },
+  "Naveen": {
+    "phone": "919818772335",
+    "seat": "700",
+    "entered": false
+  },
+  "Bose": {
+    "phone": "919811320331",
+    "seat": "1000",
+    "entered": false
+  },
+  "Hannin": {
+    "phone": "918375976642",
+    "seat": "1000",
+    "entered": false
+  },
+  "Sadia": {
+    "phone": "919717347203",
+    "seat": "240",
+    "entered": false
+  },
+  "Anas": {
+    "phone": "919871984893",
+    "seat": "2400",
+    "entered": false
+  },
+  "Ariba": {
+    "phone": "918800918266",
+    "seat": "21000",
+    "entered": true
   }
 }
