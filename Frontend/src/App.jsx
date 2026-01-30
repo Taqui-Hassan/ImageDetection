@@ -135,9 +135,7 @@ export default function App() {
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="font-bold text-white">E</span>
-              </div>
+             
               <div>
                 <h1 className="font-bold text-sm sm:text-base leading-none">Entry OS</h1>
                 <SystemStatus /> 
