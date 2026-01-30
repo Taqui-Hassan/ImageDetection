@@ -2,9 +2,9 @@ import React, { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import axios from 'axios';
 
-// COMPONENTS
-import GuestList from './components/guestList';
-import UploadExcel from './components/UploadExcel';
+// --- IMPORTS (Matches your file structure) ---
+import GuestList from './components/guestList'; 
+import UploadExcel from './components/UploadExcel'; 
 import BulkSender from './components/bulkSender';
 import SystemStatus from './components/systemStatus';
 
@@ -31,10 +31,20 @@ export default function App() {
   const [scanResult, setScanResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // --- LOGIN HANDLER ---
+  // --- LOGIN HANDLER (UPDATED) ---
   const handleLogin = (e) => {
     e.preventDefault();
-    if (password === "list2024") { 
+    
+    // 👇 USING ENV VARIABLE FOR DASHBOARD LOGIN
+    const appPassword = import.meta.env.VITE_APP_LOGIN_PASSWORD;
+
+    if (!appPassword) {
+        console.error("⚠️ VITE_APP_LOGIN_PASSWORD is missing in .env file!");
+        setError("System Error: Password Config Missing");
+        return;
+    }
+
+    if (password === appPassword) { 
       setIsLoggedIn(true);
       setError("");
     } else {
@@ -50,12 +60,12 @@ export default function App() {
     setLoading(true);
     setScanResult(null);
 
-    // Convert Base64 to Blob
     const blob = await fetch(imageSrc).then(res => res.blob());
     const formData = new FormData();
     formData.append('image', blob, 'capture.jpg');
 
     try {
+      // Ensure backend URL is also from ENV
       const res = await axios.post(`${import.meta.env.VITE_API_URL}/recognize-guest`, formData, {
         headers: { 
             'Content-Type': 'multipart/form-data',
@@ -174,7 +184,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 👇 BUTTON MOVED OUTSIDE THE IMAGE CONTAINER 👇 */}
                 <div className="mt-6 flex justify-center">
                   <button
                     onClick={capture}
@@ -202,7 +211,6 @@ export default function App() {
                     <CheckCircleIcon className="text-emerald-400" style={{ fontSize: 48 }} />
                   </div>
 
-                  {/* 👇 NAME IS NOW RENDERED EXACTLY AS IS (No Uppercase) */}
                   <h2 className="text-3xl font-bold text-white mb-2">
                     {scanResult.name}
                   </h2>
