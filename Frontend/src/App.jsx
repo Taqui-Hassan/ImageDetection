@@ -1,185 +1,193 @@
-import React, { useState } from 'react';
-import FaceCapture from './components/faceCapture';
-import GuestList from './components/guestList';
-import BulkSender from './components/bulkSender';
-import SystemStatus from './components/systemStatus';
+import React, { useRef, useState, useCallback } from 'react';
+import Webcam from 'react-webcam';
+import axios from 'axios';
+import GuestList from './components/GuestList';
+import UploadExcel from './components/UploadExcel';
+import AddGuest from './components/AddGuest'; // (If you have this component)
 
-// Icons
-import LockIcon from '@mui/icons-material/Lock';
-import FaceRetouchingNaturalIcon from '@mui/icons-material/FaceRetouchingNatural';
-import CellTowerIcon from '@mui/icons-material/CellTower';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import LogoutIcon from '@mui/icons-material/Logout';
+// ICONS
+import CameraAltIcon from '@mui/icons-material/CameraAlt';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import PersonIcon from '@mui/icons-material/Person';
+import ReplayIcon from '@mui/icons-material/Replay';
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
-  const [currentModule, setCurrentModule] = useState("menu");
-  const [excelFile, setExcelFile] = useState(null);
-  const [uploadStatus, setUploadStatus] = useState("");
+export default function App() {
+  const webcamRef = useRef(null);
+  const [activeTab, setActiveTab] = useState('scan');
+  const [scanResult, setScanResult] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    const correctPassword = import.meta.env.VITE_APP_LOGIN_PASSWORD;
-    if (passwordInput === correctPassword) setIsAuthenticated(true);
-    else alert("Access Denied");
-  };
+  // 1. CAPTURE & SEND TO AI
+  const capture = useCallback(async () => {
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (!imageSrc) return;
 
-  const handleExcelUpload = async () => {
-    if (!excelFile) { setUploadStatus("Select file first."); return; }
+    setLoading(true);
+    setScanResult(null);
+
+    // Convert Base64 to Blob
+    const blob = await fetch(imageSrc).then(res => res.blob());
     const formData = new FormData();
-    formData.append("file", excelFile);
+    formData.append('image', blob, 'capture.jpg');
+
     try {
-      setUploadStatus("Uploading...");
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/upload-excel`, {
-        method: "POST", headers: { "ngrok-skip-browser-warning": "true" }, body: formData,
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/recognize-guest`, formData, {
+        headers: { 
+            'Content-Type': 'multipart/form-data',
+            "ngrok-skip-browser-warning": "true" 
+        }
       });
-      await res.json();
-      setUploadStatus("Database Updated!");
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err) { setUploadStatus("Connection Error"); }
+      setScanResult(res.data);
+    } catch (err) {
+      console.error(err);
+      alert("Scan Failed. Check Backend.");
+    } finally {
+      setLoading(false);
+    }
+  }, [webcamRef]);
+
+  // 2. RESET SCANNER
+  const resetScan = () => {
+    setScanResult(null);
   };
 
-  // --- 1. LOGIN SCREEN ---
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
-        <div className="bg-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-700 text-center">
-          <div className="bg-blue-500/10 p-3 rounded-full inline-flex mb-4 text-blue-500">
-            <LockIcon fontSize="large" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">System Access</h1>
-          <p className="text-slate-400 mb-6 text-sm">Enter admin passcode to continue</p>
-          
-          <input 
-            type="password" 
-            placeholder="Passcode" 
-            className="w-full p-3 mb-4 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors"
-            value={passwordInput} 
-            onChange={(e) => setPasswordInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-          />
-          
-          <button 
-            onClick={handleLogin}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition-all"
-          >
-            Authenticate
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // --- 2. DASHBOARD ---
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 pb-10 font-sans">
-      {/* Header */}
-      <nav className="border-b border-slate-700 bg-slate-800/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_#22c55e]"></div>
-            <h1 className="font-bold text-lg tracking-wide">EVENT OS <span className="text-slate-500 text-xs ml-1">v3.0</span></h1>
+    <div className="min-h-screen bg-slate-900 text-white font-sans selection:bg-blue-500 selection:text-white">
+      
+      {/* --- NAVIGATION --- */}
+      <nav className="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Event OS 🚀
+          </h1>
+          <div className="flex gap-2">
+            <button 
+                onClick={() => setActiveTab('scan')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'scan' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:bg-slate-700'}`}
+            >
+              Face Scanner
+            </button>
+            <button 
+                onClick={() => setActiveTab('guests')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'guests' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:bg-slate-700'}`}
+            >
+              Guest List
+            </button>
+            <button 
+                onClick={() => setActiveTab('upload')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'upload' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:bg-slate-700'}`}
+            >
+              Import Data
+            </button>
           </div>
-          <button onClick={() => setIsAuthenticated(false)} className="text-slate-400 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors">
-            <LogoutIcon fontSize="small" /> Logout
-          </button>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-4 mt-6">
+      <main className="max-w-5xl mx-auto p-4 md:p-8">
         
-        {/* System Status Widget */}
-        <SystemStatus />
-
-        {/* --- MODULE MENU --- */}
-        {currentModule === "menu" && (
-          <div className="animate-fade-in">
-            <h2 className="text-xl md:text-2xl font-bold mb-6 text-white border-l-4 border-blue-500 pl-3">Select Module</h2>
+        {/* === TAB: FACE SCANNER === */}
+        {activeTab === 'scan' && (
+          <div className="max-w-2xl mx-auto">
             
-            {/* 👇 RESPONSIVE GRID LOGIC: 
-                grid-cols-1 = Mobile (Vertical Stack) 
-                md:grid-cols-2 = Tablet/Laptop (Side by Side) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-              
-              {/* Card 1: AI Scanner */}
-              <div 
-                onClick={() => setCurrentModule('scanner')} 
-                className="group cursor-pointer bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all duration-300 flex flex-col items-center text-center md:items-start md:text-left"
-              >
-                <div className="p-3 bg-blue-500/10 rounded-full mb-4 group-hover:scale-110 transition-transform">
-                    <FaceRetouchingNaturalIcon className="text-blue-500" style={{ fontSize: 36 }} />
+            {/* 1. CAMERA VIEW (Only show if no result) */}
+            {!scanResult && (
+              <div className="bg-slate-800 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 relative">
+                <div className="relative aspect-video bg-black">
+                  <Webcam
+                    audio={false}
+                    ref={webcamRef}
+                    screenshotFormat="image/jpeg"
+                    className="w-full h-full object-cover opacity-90"
+                    videoConstraints={{ facingMode: "user" }} // Use "environment" for back camera
+                  />
+                  
+                  {/* Overlay Scanner UI */}
+                  <div className="absolute inset-0 border-[3px] border-blue-500/30 rounded-lg m-4 pointer-events-none">
+                    <div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-blue-400 rounded-tl-lg"></div>
+                    <div className="absolute top-0 right-0 w-16 h-16 border-t-4 border-r-4 border-blue-400 rounded-tr-lg"></div>
+                    <div className="absolute bottom-0 left-0 w-16 h-16 border-b-4 border-l-4 border-blue-400 rounded-bl-lg"></div>
+                    <div className="absolute bottom-0 right-0 w-16 h-16 border-b-4 border-r-4 border-blue-400 rounded-br-lg"></div>
+                  </div>
+
+                  {loading && (
+                    <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center backdrop-blur-sm">
+                      <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                      <p className="text-blue-400 font-bold tracking-widest animate-pulse">SCANNING FACE...</p>
+                    </div>
+                  )}
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">AI Scanner</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">Biometric recognition for VIPs. Manage database and track entry.</p>
-              </div>
 
-              {/* Card 2: Bulk Sender */}
-              <div 
-                onClick={() => setCurrentModule('bulk')} 
-                className="group cursor-pointer bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-green-500 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all duration-300 flex flex-col items-center text-center md:items-start md:text-left"
-              >
-                <div className="p-3 bg-green-500/10 rounded-full mb-4 group-hover:scale-110 transition-transform">
-                    <CellTowerIcon className="text-green-500" style={{ fontSize: 36 }} />
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2">Direct Messages</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">Mass broadcast via Excel. Supports auto-image downloading from URLs.</p>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* --- MODULE: AI SCANNER --- */}
-        {currentModule === "scanner" && (
-          <div className="animate-fade-in">
-            <button onClick={() => setCurrentModule('menu')} className="mb-4 text-slate-400 hover:text-white transition-colors flex items-center gap-1 text-sm font-medium">
-              ← Return to Menu
-            </button>
-
-            {/* DB Upload Card */}
-            <div className="bg-slate-800/50 border-l-4 border-blue-500 p-5 rounded-r-xl mb-8">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-blue-400">Database Import</h3>
-                  <p className="text-xs text-slate-400">Update guest list via Excel.</p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <label className="cursor-pointer bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 border border-slate-600">
-                    <UploadFileIcon fontSize="small" />
-                    <span className="truncate max-w-37.5">{excelFile ? excelFile.name : "Select File"}</span>
-                    <input type="file" hidden accept=".xlsx, .xls" onChange={(e) => setExcelFile(e.target.files[0])} />
-                  </label>
-                  <button onClick={handleExcelUpload} disabled={!excelFile} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20">
-                    Update DB
+                <div className="p-6 text-center">
+                  <button
+                    onClick={capture}
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 px-8 rounded-xl shadow-lg transform transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <CameraAltIcon />
+                    {loading ? "Processing..." : "SCAN GUEST"}
                   </button>
+                  <p className="mt-3 text-slate-500 text-sm">Ensure good lighting and face the camera directly.</p>
                 </div>
               </div>
-              
-              {/* Format Hint */}
-              <div className="bg-slate-900 p-3 rounded-lg border border-slate-700/50 flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Required Columns:</span>
-                {['Name', 'Phone', 'Seat', 'ImageURL'].map(col => (
-                  <span key={col} className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded border border-slate-700 font-mono">
-                    {col}
-                  </span>
-                ))}
-              </div>
-              {uploadStatus && <p className="mt-3 text-sm text-green-400 font-mono">{`> ${uploadStatus}`}</p>}
-            </div>
+            )}
 
-            <FaceCapture />
-            <div className="mt-8">
-              <GuestList />
-            </div>
+            {/* 2. SUCCESS RESULT (THE BIG UPDATE) 🚀 */}
+            {scanResult && scanResult.status === 'matched' && (
+              <div className="bg-gradient-to-br from-green-500 to-emerald-700 rounded-3xl p-1 shadow-2xl animate-fade-in-up text-center">
+                <div className="bg-slate-900 rounded-[22px] p-8 md:p-12 h-full flex flex-col items-center justify-center min-h-[500px]">
+                  
+                  <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mb-6">
+                    <CheckCircleIcon className="text-green-400" style={{ fontSize: 60 }} />
+                  </div>
+
+                  <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">
+                    Welcome, <span className="text-green-400">{scanResult.name}</span>!
+                  </h2>
+                  <p className="text-slate-400 text-lg mb-8">Access Granted • WhatsApp Sent ✅</p>
+
+                  {/* 👇 THE MASSIVE SEAT NUMBER */}
+                  <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8 w-full max-w-md mb-8">
+                    <p className="text-slate-400 uppercase tracking-widest text-sm font-bold mb-2">Your Seat Number</p>
+                    <p className="text-7xl md:text-9xl font-black text-white tracking-tighter">
+                      {scanResult.seat || "A-12"}
+                    </p>
+                  </div>
+
+                  <button 
+                    onClick={resetScan}
+                    className="bg-slate-800 hover:bg-slate-700 text-white px-8 py-3 rounded-full font-bold transition-all flex items-center gap-2 border border-slate-600"
+                  >
+                    <ReplayIcon /> Scan Next Guest
+                  </button>
+
+                </div>
+              </div>
+            )}
+
+            {/* 3. FAILED RESULT */}
+            {scanResult && scanResult.status !== 'matched' && (
+              <div className="bg-red-500/10 border border-red-500/50 rounded-2xl p-8 text-center animate-shake">
+                <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <PersonIcon className="text-red-500" style={{ fontSize: 40 }} />
+                </div>
+                <h3 className="text-2xl font-bold text-red-400 mb-2">Access Denied</h3>
+                <p className="text-slate-400 mb-6">Face not recognized in the database.</p>
+                <button 
+                  onClick={resetScan}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2 rounded-lg font-bold transition-all"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
+
           </div>
         )}
 
-        {/* --- MODULE: BULK SENDER --- */}
-        {currentModule === "bulk" && <BulkSender onBack={() => setCurrentModule('menu')} />}
-
-      </div>
+        {/* === OTHER TABS === */}
+        {activeTab === 'guests' && <GuestList />}
+        {activeTab === 'upload' && <UploadExcel />}
+      </main>
     </div>
   );
 }
-
-export default App;

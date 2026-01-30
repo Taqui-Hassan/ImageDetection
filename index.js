@@ -156,7 +156,7 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
             const cleanPhone = formatPhoneNumber(guestData.phone);
             const seatNumber = guestData.seat || "Assigned on arrival";
             const chatId = `${cleanPhone}@c.us`;
-            const caption = `🎉 Welcome ${foundName}!\n\n📍 *Your Seat Number is: ${seatNumber}*\n\nEnjoy the event! 🚀`;
+            const caption = `Dear ${foundName} San\n\n *Your Seat Number is: ${seatNumber}*📍\n\nEnjoy the event!`;
 
             try {
                 const media = await MessageMedia.fromFilePath(filePath);
