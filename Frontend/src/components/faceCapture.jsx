@@ -111,9 +111,9 @@ export default function FaceCapture() {
                         <h4 className={`text-sm font-bold uppercase ${result.status === 'matched' ? 'text-green-500' : 'text-red-500'}`}>
                             {result.status === 'matched' ? 'IDENTITY VERIFIED' : 'NO MATCH FOUND'}
                         </h4>
-                        {result.name && <p className="text-xl font-bold text-white mt-1">{result.name}</p>}
-                        {result.seat && <p className="text-sm text-slate-400 font-mono">SEAT: <span className="text-white">{result.seat}</span></p>}
-                        {result.messageSent && <p className="text-[10px] text-green-400 mt-1 uppercase tracking-wide">✔ WhatsApp Sent</p>}
+                        {result.name && <p className="text-xl font-bold text-white mt-1">Welcome {result.name} San</p>}
+                        {result.seat && <p className="text-sm text-slate-400 font-mono">Your SEAT: <span className="text-white">{result.seat}</span></p>}
+                        
                     </div>
                 </div>
             </div>
