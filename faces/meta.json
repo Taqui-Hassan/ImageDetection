@@ -7,7 +7,7 @@
   "Taqui": {
     "phone": "918800918266",
     "seat": "211",
-    "entered": true
+    "entered": false
   },
   "Hardayal": {
     "phone": "919988251524",
@@ -62,7 +62,7 @@
   "Ariba": {
     "phone": "918800918266",
     "seat": "21000",
-    "entered": true
+    "entered": false
   },
   "Sadia": {
     "phone": "919717347203",

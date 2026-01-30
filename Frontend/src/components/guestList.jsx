@@ -16,8 +16,24 @@ export default function GuestList() {
     const [searchTerm, setSearchTerm] = useState("");
 
     const fetchGuests = (pwd) => {
-        setLoading(true); setError("");
-        // Pass the password (if you enabled the check in backend)
+        setLoading(true); 
+        setError("");
+
+        // 🔒 SECURITY FIX: Client-Side Validation
+        // This ensures the password is correct BEFORE calling the backend.
+        const correctPassword = import.meta.env.VITE_GUEST_LIST_PASSWORD;
+
+        if (!correctPassword) {
+            console.error("⚠️ Missing VITE_GUEST_LIST_PASSWORD in .env");
+        }
+
+        if (pwd !== correctPassword) {
+            setError("INVALID PASSCODE");
+            setLoading(false);
+            return; // ⛔ STOP HERE! Do not fetch data.
+        }
+
+        // If password matches, proceed to fetch
         fetch(`${import.meta.env.VITE_API_URL}/guests`, {
             headers: { "ngrok-skip-browser-warning": "true", "x-admin-password": pwd }
         })
@@ -26,7 +42,7 @@ export default function GuestList() {
             return res.json();
         })
         .then(data => { setGuests(data); setIsUnlocked(true); setLoading(false); })
-        .catch(() => { setError("INVALID PASSCODE"); setLoading(false); });
+        .catch(() => { setError("Data Fetch Failed"); setLoading(false); });
     };
 
     const handleDelete = async (name) => {
@@ -35,7 +51,7 @@ export default function GuestList() {
         setGuests(prev => prev.filter(g => g.name !== name));
     };
 
-    // 👇 NEW: Toggle Entry Status
+    // 👇 Toggle Entry Status
     const handleToggleEntry = async (name) => {
         try {
             const res = await fetch(`${import.meta.env.VITE_API_URL}/guests/${name}/toggle`, {
