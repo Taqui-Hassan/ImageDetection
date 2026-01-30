@@ -57,7 +57,7 @@ export default function App() {
       {/* --- NAVIGATION --- */}
       <nav className="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-50">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+          <h1 className="text-xl font-bold bg-linear-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
             Event OS 🚀
           </h1>
           <div className="flex gap-2">
@@ -121,7 +121,7 @@ export default function App() {
                   <button
                     onClick={capture}
                     disabled={loading}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 px-8 rounded-xl shadow-lg transform transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 px-8 rounded-xl shadow-lg transform transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <CameraAltIcon />
                     {loading ? "Processing..." : "SCAN GUEST"}
@@ -133,8 +133,8 @@ export default function App() {
 
             {/* 2. SUCCESS RESULT (THE BIG UPDATE) 🚀 */}
             {scanResult && scanResult.status === 'matched' && (
-              <div className="bg-gradient-to-br from-green-500 to-emerald-700 rounded-3xl p-1 shadow-2xl animate-fade-in-up text-center">
-                <div className="bg-slate-900 rounded-[22px] p-8 md:p-12 h-full flex flex-col items-center justify-center min-h-[500px]">
+              <div className="bg-linear-to-br from-green-500 to-emerald-700 rounded-3xl p-1 shadow-2xl animate-fade-in-up text-center">
+                <div className="bg-slate-900 rounded-[22px] p-8 md:p-12 h-full flex flex-col items-center justify-center min-h-125">
                   
                   <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mb-6">
                     <CheckCircleIcon className="text-green-400" style={{ fontSize: 60 }} />
