@@ -56,7 +56,7 @@ export default function BulkSender({ onBack }) {
                         {/* Format Guide */}
                         <div className="mt-4 flex flex-wrap justify-center gap-2">
                             <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mt-1">Format:</span>
-                            {['Name', 'Phone', 'Seat', 'ImageURL'].map(h => (
+                            {['Name', 'Phone','ImageURL','Seat'].map(h => (
                                 <span key={h} className="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded border border-slate-700 font-mono">
                                     {h}
                                 </span>
