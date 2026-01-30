@@ -57,7 +57,7 @@ export default function UploadExcel() {
             <div className="text-center mb-8">
                 <CloudUploadIcon className="text-blue-500 mb-4" style={{ fontSize: 60 }} />
                 <h2 className="text-2xl font-bold text-white mb-2">Import Guest List</h2>
-                <p className="text-slate-400">Upload an Excel (.xlsx) file with columns: <b>Name, Phone, Seat</b></p>
+                <p className="text-slate-400">Upload an Excel (.xlsx) file with columns: <b>Name, Phone, ImageURL, Seat</b></p>
             </div>
 
             <div className="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:bg-slate-700/30 transition-colors relative">
