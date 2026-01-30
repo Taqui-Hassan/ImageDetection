@@ -3,7 +3,6 @@ import Webcam from 'react-webcam';
 import axios from 'axios';
 import GuestList from './components/guestList';
 import UploadExcel from './components/UploadExcel';
-import AddGuest from './components/AddGuest'; // (If you have this component)
 
 // ICONS
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
@@ -185,7 +184,7 @@ export default function App() {
         )}
 
         {/* === OTHER TABS === */}
-        {activeTab === 'guests' && <guestList />}
+        {activeTab === 'guests' && <GuestList />}
         {activeTab === 'upload' && <UploadExcel />}
       </main>
     </div>
