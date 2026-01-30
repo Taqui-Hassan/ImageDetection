@@ -5,7 +5,7 @@ import axios from 'axios';
 // COMPONENTS
 import GuestList from './components/guestList';
 import UploadExcel from './components/UploadExcel';
-import BulkSender from './components/BulkSender'; // Restored
+import BulkSender from './components/bulkSender'; // Restored
 import SystemStatus from './components/systemStatus'; // Restored
 
 // ICONS
