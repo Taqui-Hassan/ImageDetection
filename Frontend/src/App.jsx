@@ -71,13 +71,11 @@ export default function App() {
     }
   }, [webcamRef]);
 
-  // --- RENDER: LOGIN SCREEN (If locked) ---
+  // --- RENDER: LOGIN SCREEN ---
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        {/* Background Decoration */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
-        <div className="absolute w-96 h-96 bg-blue-600/10 rounded-full blur-3xl -top-10 -left-10 pointer-events-none"></div>
         
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm relative z-10">
           <div className="flex justify-center mb-6">
@@ -99,13 +97,7 @@ export default function App() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs text-center font-medium animate-pulse">
-                {error}
-              </div>
-            )}
-
+            {error && <div className="text-red-400 text-xs text-center font-medium">{error}</div>}
             <button 
               type="submit"
               className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95"
@@ -114,7 +106,6 @@ export default function App() {
             </button>
           </form>
         </div>
-        <p className="mt-8 text-slate-600 text-xs">System v2.4 • Secure Connection</p>
       </div>
     );
   }
@@ -127,7 +118,6 @@ export default function App() {
       <nav className="sticky top-0 z-50 backdrop-blur-md bg-slate-900/80 border-b border-white/5">
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
-            {/* Logo Area */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                 <span className="font-bold text-white">E</span>
@@ -137,18 +127,14 @@ export default function App() {
                 <SystemStatus /> 
               </div>
             </div>
-
-            {/* Logout */}
             <button 
               onClick={() => setIsLoggedIn(false)}
               className="p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-              title="Logout"
             >
               <LogoutIcon fontSize="small" />
             </button>
           </div>
 
-          {/* Tab Switcher (Scrollable on mobile) */}
           <div className="flex overflow-x-auto gap-1 pb-3 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
             <TabButton active={activeTab === 'scan'} onClick={() => setActiveTab('scan')} icon={<CameraAltIcon fontSize="small"/>} label="Scanner" />
             <TabButton active={activeTab === 'guests'} onClick={() => setActiveTab('guests')} icon={<ListAltIcon fontSize="small"/>} label="Guest List" />
@@ -167,34 +153,36 @@ export default function App() {
             
             {/* CAMERA STATE */}
             {!scanResult && (
-              <div className="bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative aspect-[4/3] sm:aspect-video">
-                <Webcam
-                  audio={false}
-                  ref={webcamRef}
-                  screenshotFormat="image/jpeg"
-                  className="w-full h-full object-cover"
-                  videoConstraints={{ facingMode: "environment" }} 
-                />
-                
-                {/* Scanner Overlay */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-64 h-64 border-2 border-blue-500/50 rounded-xl relative">
-                    <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-blue-400 -mt-1 -ml-1"></div>
-                    <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-blue-400 -mt-1 -mr-1"></div>
-                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-blue-400 -mb-1 -ml-1"></div>
-                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-blue-400 -mb-1 -mr-1"></div>
+              <>
+                <div className="bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative aspect-[4/3] sm:aspect-video">
+                  <Webcam
+                    audio={false}
+                    ref={webcamRef}
+                    screenshotFormat="image/jpeg"
+                    className="w-full h-full object-cover"
+                    videoConstraints={{ facingMode: "environment" }} 
+                  />
+                  
+                  {/* Scanner Overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-64 h-64 border-2 border-blue-500/50 rounded-xl relative">
+                      <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-blue-400 -mt-1 -ml-1"></div>
+                      <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-blue-400 -mt-1 -mr-1"></div>
+                      <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-blue-400 -mb-1 -ml-1"></div>
+                      <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-blue-400 -mb-1 -mr-1"></div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Scan Button Overlay */}
-                <div className="absolute bottom-6 left-0 right-0 flex justify-center">
+                {/* 👇 BUTTON MOVED OUTSIDE THE IMAGE CONTAINER 👇 */}
+                <div className="mt-6 flex justify-center">
                   <button
                     onClick={capture}
                     disabled={loading}
-                    className="bg-white text-black rounded-full px-8 py-4 font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-transform flex items-center gap-2"
+                    className="w-full max-w-sm bg-white text-slate-900 rounded-xl px-8 py-5 font-bold text-lg shadow-xl shadow-blue-900/10 active:scale-95 transition-all hover:bg-slate-100 flex items-center justify-center gap-3"
                   >
                     {loading ? (
-                      <span className="animate-pulse">Scanning...</span>
+                      <span className="animate-pulse">Processing...</span>
                     ) : (
                       <>
                         <CameraAltIcon /> SCAN FACE
@@ -202,27 +190,28 @@ export default function App() {
                     )}
                   </button>
                 </div>
-              </div>
+              </>
             )}
 
-            {/* RESULT STATE: MATCH FOUND (Green) */}
+            {/* RESULT STATE: MATCH FOUND */}
             {scanResult && scanResult.status === 'matched' && (
               <div className="bg-emerald-600 rounded-3xl p-1 shadow-[0_0_50px_rgba(16,185,129,0.3)] mt-4">
                 <div className="bg-slate-900 rounded-[20px] p-8 text-center min-h-[400px] flex flex-col items-center justify-center">
                   
-                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6 animate-bounce-short">
+                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
                     <CheckCircleIcon className="text-emerald-400" style={{ fontSize: 48 }} />
                   </div>
 
+                  {/* 👇 NAME IS NOW RENDERED EXACTLY AS IS (No Uppercase) */}
                   <h2 className="text-3xl font-bold text-white mb-2">
                     {scanResult.name}
                   </h2>
+                  
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20 text-emerald-400 text-sm font-medium mb-8">
                     <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
                     Access Granted
                   </div>
 
-                  {/* HUGE SEAT NUMBER */}
                   <div className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl p-6 mb-8">
                     <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Assigned Seat</p>
                     <p className="text-7xl font-black text-white tracking-tighter">
@@ -240,7 +229,7 @@ export default function App() {
               </div>
             )}
 
-            {/* RESULT STATE: FAILED (Red) */}
+            {/* RESULT STATE: FAILED */}
             {scanResult && scanResult.status !== 'matched' && (
               <div className="bg-red-600 rounded-3xl p-1 shadow-[0_0_50px_rgba(239,68,68,0.3)] mt-4">
                 <div className="bg-slate-900 rounded-[20px] p-8 text-center min-h-[300px] flex flex-col items-center justify-center">
