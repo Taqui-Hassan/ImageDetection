@@ -216,16 +216,7 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
             stats.success++;
 
             // Safety Check: Already Entered?
-            if (guestData.entered) {
-                console.log(`⚠️ ${foundKey} scanned again. Skipping WhatsApp.`);
-                return res.json({ 
-                    status: "matched", 
-                    name: foundKey, 
-                    seat: guestData.seat || "General",
-                    entered: true,
-                    message: "Welcome back!" 
-                });
-            }
+           
 
             // MARK ENTERED
             meta[foundKey].entered = true;

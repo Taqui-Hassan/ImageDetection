@@ -2,25 +2,28 @@ import { useRef, useState, useEffect } from "react";
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import WarningIcon from '@mui/icons-material/Warning';
+import PersonIcon from '@mui/icons-material/Person';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ReplayIcon from '@mui/icons-material/Replay';
-import PersonIcon from '@mui/icons-material/Person';
 
 export default function FaceCapture() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState(null); // Stores the scan result
   const [facingMode, setFacingMode] = useState("user");
 
-  // --- 1. START HD CAMERA ---
+  // --- 1. START HD CAMERA (RUNS ONCE & STAYS ON) ---
   useEffect(() => {
     let currentStream = null;
     const startCamera = async () => {
         if (videoRef.current?.srcObject) {
-            videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+            // Only stop tracks if we are CHANGING the camera (user clicked switch)
+            // We do NOT stop tracks if just showing the result screen
+            const tracks = videoRef.current.srcObject.getTracks();
+            tracks.forEach(t => t.stop());
         }
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { 
@@ -29,11 +32,13 @@ export default function FaceCapture() {
                     height: { min: 720, ideal: 1080, max: 1440 }
                 } 
             });
-            if (videoRef.current) videoRef.current.srcObject = stream;
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
             currentStream = stream;
         } catch (err) { 
             console.error("Camera Error:", err);
-            // Fallback for older phones
+            // Fallback
             try {
                 const lowStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
                 if (videoRef.current) videoRef.current.srcObject = lowStream;
@@ -42,10 +47,14 @@ export default function FaceCapture() {
         }
     };
     startCamera();
-    return () => currentStream?.getTracks().forEach(t => t.stop());
+    
+    // Cleanup only on component unmount
+    return () => {
+        if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+    };
   }, [facingMode]);
 
-  // --- 2. CAPTURE & SCAN ---
+  // --- 2. CAPTURE ---
   const recognizeFace = async () => {
     if (!videoRef.current) return;
     setLoading(true); 
@@ -66,7 +75,7 @@ export default function FaceCapture() {
             body: formData
         });
         const data = await res.json();
-        setResult(data); // Show the Big Screen
+        setResult(data); // Shows overlay, but KEEPS CAMERA RUNNING BEHIND
       } catch (err) { 
         alert("System Error: Backend Offline");
       } finally { 
@@ -75,135 +84,89 @@ export default function FaceCapture() {
     }, "image/jpeg", 0.95);
   };
 
-  // --- 3. RESET SCANNER ---
+  // --- 3. RESET (INSTANT) ---
   const resetScanner = () => {
-    setResult(null);
+    setResult(null); // Just hides the overlay. Camera is already running!
   };
 
-  // ============================================================
-  // VIEW 1: SUCCESS (BIG GREEN SCREEN)
-  // ============================================================
-  if (result && result.status === 'matched') {
-    return (
-      <div className="fixed inset-0 z-50 bg-emerald-600 flex flex-col items-center justify-center p-6 text-center animate-fade-in">
-        
-        {/* Success Icon */}
-        <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mb-6 shadow-2xl">
-            <CheckCircleIcon className="text-white" style={{ fontSize: 64 }} />
-        </div>
-
-        {/* Name */}
-        <h1 className="text-4xl sm:text-6xl font-black text-white mb-2 drop-shadow-md">
-            {result.name}
-        </h1>
-        
-        <div className="inline-block bg-emerald-800/30 px-6 py-2 rounded-full text-emerald-100 font-bold tracking-widest mb-10 border border-emerald-400/30">
-            ACCESS GRANTED
-        </div>
-
-        {/* Seat Card */}
-        <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-8 w-full max-w-sm mx-auto mb-10 shadow-xl">
-            <p className="text-emerald-100 text-sm font-bold uppercase tracking-[0.2em] mb-2">Assigned Seat</p>
-            <p className="text-7xl font-black text-white tracking-tighter shadow-black">
-                {result.seat || "A-01"}
-            </p>
-        </div>
-
-        {/* Custom Message (if any) */}
-        {result.message && (
-             <p className="text-yellow-300 font-bold text-lg mb-8 bg-black/20 px-4 py-2 rounded-lg">
-                ⚠️ {result.message}
-             </p>
-        )}
-
-        {/* Next Button */}
-        <button 
-            onClick={resetScanner}
-            className="bg-white text-emerald-800 font-bold text-xl py-5 px-12 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center gap-3"
-        >
-            <ReplayIcon fontSize="large" /> NEXT GUEST
-        </button>
-      </div>
-    );
-  }
-
-  // ============================================================
-  // VIEW 2: FAILED (BIG RED SCREEN)
-  // ============================================================
-  if (result && result.status !== 'matched') {
-    return (
-      <div className="fixed inset-0 z-50 bg-red-600 flex flex-col items-center justify-center p-6 text-center animate-fade-in">
-        
-        <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mb-6 shadow-2xl">
-            <PersonIcon className="text-white" style={{ fontSize: 64 }} />
-        </div>
-
-        <h1 className="text-4xl sm:text-5xl font-black text-white mb-4 drop-shadow-md">
-            UNKNOWN GUEST
-        </h1>
-        
-        <p className="text-red-100 text-xl font-medium mb-10 max-w-md">
-            Face not found in the guest list. Please check with the registration desk.
-        </p>
-
-        <button 
-            onClick={resetScanner}
-            className="bg-white text-red-800 font-bold text-xl py-5 px-12 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center gap-3"
-        >
-            <ReplayIcon fontSize="large" /> TRY AGAIN
-        </button>
-      </div>
-    );
-  }
-
-  // ============================================================
-  // VIEW 3: CAMERA (DEFAULT)
-  // ============================================================
   return (
-    <div className="bg-black border border-slate-700 rounded-xl p-4 shadow-2xl relative overflow-hidden">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4 px-2">
-            <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${loading ? 'bg-blue-500 animate-pulse' : 'bg-red-500 animate-ping'}`}></div>
-                <span className="text-xs font-bold text-slate-400 tracking-widest">
-                    {loading ? "TRANSMITTING..." : "LIVE FEED // REC"}
-                </span>
-            </div>
-            <button onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")} className="text-slate-500 hover:text-white transition-colors">
-                <CameraswitchIcon fontSize="small" />
-            </button>
-        </div>
-
-        {/* Viewfinder */}
-        <div className="relative rounded-lg overflow-hidden bg-slate-900 border-2 border-slate-800 aspect-[4/3] group">
-            <video ref={videoRef} autoPlay playsInline className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
+    <div className="bg-black border border-slate-700 rounded-xl p-4 shadow-2xl relative overflow-hidden h-[80vh] flex flex-col">
+        
+        {/* --- CAMERA VIEW (ALWAYS ACTIVE) --- */}
+        <div className="relative rounded-lg overflow-hidden bg-slate-900 border-2 border-slate-800 flex-grow group">
+            <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
+            />
             
-            {/* Grid Overlay */}
-            <div className="absolute inset-0 border border-slate-500/20 m-4 rounded pointer-events-none"></div>
+            {/* Header Controls */}
+            <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent">
+                <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${loading ? 'bg-blue-500 animate-pulse' : 'bg-red-500 animate-ping'}`}></div>
+                    <span className="text-xs font-bold text-white/80 tracking-widest shadow-black drop-shadow-md">
+                        {loading ? "TRANSMITTING..." : "LIVE FEED // REC"}
+                    </span>
+                </div>
+                <button onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")} className="text-white hover:text-blue-400 transition-colors drop-shadow-md">
+                    <CameraswitchIcon fontSize="medium" />
+                </button>
+            </div>
 
-            {/* Scanning Animation */}
+            {/* Scanning Scanline Animation */}
             {loading && (
-                <div className="absolute inset-0 z-10">
+                <div className="absolute inset-0 z-10 pointer-events-none">
                     <div className="absolute inset-0 bg-blue-500/10 animate-pulse"></div>
-                    <div className="absolute inset-0 bg-linear-to-b from-transparent via-blue-400/30 to-transparent animate-[scan_1.5s_linear_infinite] border-b-2 border-blue-400"></div>
+                    <div className="absolute inset-0 bg-linear-to-b from-transparent via-blue-400/50 to-transparent animate-[scan_1.5s_linear_infinite] border-b-4 border-blue-400 shadow-[0_0_20px_#60a5fa]"></div>
+                </div>
+            )}
+
+            {/* 🟢 SUCCESS OVERLAY (Absolute Positioned on top of video) */}
+            {result && result.status === 'matched' && (
+                <div className="absolute inset-0 z-50 bg-emerald-600/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+                    <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-4 shadow-2xl">
+                        <CheckCircleIcon className="text-white" style={{ fontSize: 50 }} />
+                    </div>
+                    <h1 className="text-4xl font-black text-white mb-2 drop-shadow-md">{result.name}</h1>
+                    <div className="inline-block bg-emerald-800/40 px-4 py-1 rounded-full text-emerald-100 font-bold tracking-widest mb-6 border border-emerald-400/30">
+                        ACCESS GRANTED
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 w-full max-w-xs mx-auto mb-6 shadow-xl">
+                        <p className="text-emerald-100 text-xs font-bold uppercase tracking-[0.2em] mb-1">Assigned Seat</p>
+                        <p className="text-6xl font-black text-white tracking-tighter shadow-black">
+                            {result.seat || "A-01"}
+                        </p>
+                    </div>
+                    <button onClick={resetScanner} className="bg-white text-emerald-800 font-bold text-lg py-4 px-10 rounded-xl shadow-xl hover:scale-105 transition-transform flex items-center gap-2">
+                        <ReplayIcon fontSize="medium" /> NEXT GUEST
+                    </button>
+                </div>
+            )}
+
+            {/* 🔴 FAILED OVERLAY */}
+            {result && result.status !== 'matched' && (
+                <div className="absolute inset-0 z-50 bg-red-600/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+                    <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-4 shadow-2xl">
+                        <PersonIcon className="text-white" style={{ fontSize: 50 }} />
+                    </div>
+                    <h1 className="text-3xl font-black text-white mb-2 drop-shadow-md">UNKNOWN GUEST</h1>
+                    <p className="text-red-100 text-lg font-medium mb-8 max-w-xs">Face not found in list.</p>
+                    <button onClick={resetScanner} className="bg-white text-red-800 font-bold text-lg py-4 px-10 rounded-xl shadow-xl hover:scale-105 transition-transform flex items-center gap-2">
+                        <ReplayIcon fontSize="medium" /> TRY AGAIN
+                    </button>
                 </div>
             )}
         </div>
+
+        {/* Hidden Canvas */}
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Sending Message */}
-        {loading && (
-            <div className="mt-3 flex items-center justify-center gap-2 text-blue-400 animate-pulse">
-                <CloudUploadIcon fontSize="small" />
-                <span className="text-xs font-bold tracking-wider">SENDING TO AI...</span>
-            </div>
-        )}
-
-        {/* Capture Button */}
+        {/* --- BOTTOM BUTTON --- */}
         <div className="mt-4">
             <button 
                 onClick={recognizeFace} 
-                disabled={loading}
+                disabled={loading || result !== null} // Disable if scanning or showing result
                 className={`w-full font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${
                     loading 
                     ? 'bg-slate-800 text-slate-400 cursor-wait border border-slate-700' 
