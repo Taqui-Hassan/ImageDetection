@@ -78,5 +78,10 @@
     "phone": "919911455935",
     "seat": "600",
     "entered": true
+  },
+  "taqui": {
+    "phone": "918800918266",
+    "seat": "20",
+    "entered": true
   }
 }

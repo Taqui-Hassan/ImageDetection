@@ -65,7 +65,7 @@ def recognize_guest():
             distance = match['distance']
             
             # Strictness check (Lower is better match)
-            if distance < 0.40:
+            if distance < 0.55:
                 # Extract Name from Folder (e.g., faces/Taqui/img.jpg -> Taqui)
                 # We fix the slash direction for Linux (Render) vs Windows
                 identity_path = identity_path.replace("\\", "/")
