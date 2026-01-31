@@ -32,7 +32,7 @@ def home():
         "photos_loaded": count,
         "faces_path": FACES_DIR
     })
-
+@app.route('/recognize', methods=['POST'])
 @app.route('/recognize-guest', methods=['POST'])
 def recognize_guest():
     if 'image' not in request.files:
