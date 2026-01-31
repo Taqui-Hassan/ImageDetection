@@ -11,7 +11,6 @@ import FormData from 'form-data';
 import qrcodeTerminal from 'qrcode-terminal';
 import pkg from 'whatsapp-web.js';
 
-// Load environment variables
 dotenv.config();
 
 const { Client, LocalAuth, MessageMedia } = pkg;
@@ -25,7 +24,7 @@ app.use(express.json({ limit: '50mb' }));
 // --- CONFIGURATION ---
 const CONFIG = {
     PORT: process.env.PORT || 8000,
-    PYTHON_SERVICE_URL: process.env.PYTHON_SERVICE_URL || 'http://localhost:5000',
+    PYTHON_SERVICE_URL: process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5000',
     GUEST_LIST_PASSWORD: process.env.GUEST_LIST_PASSWORD || "list2024"
 };
 
@@ -40,6 +39,15 @@ const META_FILE = path.join(FACE_DB, "meta.json");
 });
 if (!fs.existsSync(META_FILE)) fs.writeFileSync(META_FILE, "{}");
 
+// --- LIVE STATS TRACKER (NEW) ---
+let stats = {
+    totalScans: 0,
+    success: 0,
+    failed: 0,
+    lastScanned: "None",
+    recentFailures: [] // Stores last 10 failed names
+};
+
 // --- WHATSAPP CLIENT ---
 let isWhatsAppReady = false;
 let currentQR = null; 
@@ -47,10 +55,9 @@ let currentQR = null;
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
     puppeteer: {
-        headless: false,
+        headless: true, 
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', '--disable-gpu']
     }
-    
 });
 
 client.on('qr', qr => { console.log('🔥 QR RECEIVED'); currentQR = qr; qrcodeTerminal.generate(qr, { small: true }); });
@@ -67,19 +74,61 @@ function formatPhoneNumber(phone) {
 
 // --- ROUTES ---
 
-// 1. SYSTEM STATUS
+// 1. NEW: LIVE MONITOR DASHBOARD 📊
+app.get("/monitor", (req, res) => {
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Event Monitor</title>
+        <meta http-equiv="refresh" content="3"> <style>
+            body { font-family: sans-serif; background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .grid { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; }
+            .card { background: #333; padding: 20px; border-radius: 10px; width: 200px; }
+            .number { font-size: 40px; font-weight: bold; }
+            .green { color: #4caf50; } .red { color: #f44336; } .blue { color: #2196f3; }
+            table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+            th, td { border: 1px solid #444; padding: 10px; text-align: left; }
+            th { background: #444; }
+        </style>
+    </head>
+    <body>
+        <h1>🚀 Event Live Monitor</h1>
+        <div class="grid">
+            <div class="card">
+                <div>Total Scans</div>
+                <div class="number blue">${stats.totalScans}</div>
+            </div>
+            <div class="card">
+                <div>Matched (Success)</div>
+                <div class="number green">${stats.success}</div>
+            </div>
+            <div class="card">
+                <div>Failed (Unknown)</div>
+                <div class="number red">${stats.failed}</div>
+            </div>
+        </div>
+        <h2>Last Scanned: <span style="color: yellow">${stats.lastScanned}</span></h2>
+        
+        <h3>❌ Recent Failures (Not in List)</h3>
+        <table>
+            <tr><th>Time</th><th>Name Detected by AI</th></tr>
+            ${stats.recentFailures.map(f => `<tr><td>${f.time}</td><td>${f.name}</td></tr>`).join('')}
+        </table>
+    </body>
+    </html>
+    `;
+    res.send(html);
+});
+
+// 2. EXISTING ROUTES
 app.get("/system-status", async (req, res) => {
     let batteryInfo = null;
     try { if (isWhatsAppReady) batteryInfo = await client.info.getBatteryStatus(); } catch (e) {}
     res.json({ whatsapp: isWhatsAppReady, qr: currentQR, user: isWhatsAppReady ? client.info.wid.user : null, battery: batteryInfo });
 });
 
-// 2. GET GUESTS (SECURED)
 app.get("/guests", (req, res) => {
-    const adminPassword = req.headers['x-admin-password'];
-    if (adminPassword !== CONFIG.GUEST_LIST_PASSWORD) {
-       // return res.status(403).json({ error: "Wrong Password" }); 
-    }
     try {
         if (fs.existsSync(META_FILE)) {
             const meta = JSON.parse(fs.readFileSync(META_FILE));
@@ -87,20 +136,18 @@ app.get("/guests", (req, res) => {
                 name, 
                 phone: meta[name].phone, 
                 seat: meta[name].seat || "N/A",
-                entered: meta[name].entered || false // 👈 NEW FIELD
+                entered: meta[name].entered || false 
             }));
             res.json(guests);
         } else { res.json([]); }
     } catch (err) { res.json([]); }
 });
 
-// 3. TOGGLE ENTRY STATUS (NEW ROUTE) 👈
 app.put("/guests/:name/toggle", (req, res) => {
     const nameToUpdate = req.params.name;
     try {
         let meta = JSON.parse(fs.readFileSync(META_FILE));
         if (meta[nameToUpdate]) {
-            // Flip the status (True -> False / False -> True)
             meta[nameToUpdate].entered = !meta[nameToUpdate].entered;
             fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
             res.json({ status: "success", entered: meta[nameToUpdate].entered });
@@ -108,7 +155,6 @@ app.put("/guests/:name/toggle", (req, res) => {
     } catch (err) { res.status(500).json({ error: "Update failed" }); }
 });
 
-// 4. DELETE GUEST
 app.delete("/guests/:name", (req, res) => {
     const nameToDelete = req.params.name;
     try {
@@ -123,16 +169,18 @@ app.delete("/guests/:name", (req, res) => {
 
 const upload = multer({ dest: UPLOADS_DIR });
 
-// 5. AI RECOGNIZE (Scanner)
+// 3. AI RECOGNIZE (UPDATED WITH STATS)
 app.post("/recognize-guest", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No image" });
+    
+    // UPDATE STATS
+    stats.totalScans++;
+
     const originalPath = req.file.path;
     const filePath = originalPath + '.jpg';
     fs.renameSync(originalPath, filePath);
 
     try {
-        if (!isWhatsAppReady) return res.status(503).json({ error: "WhatsApp starting..." });
-        
         console.log("📤 Sending image to AI..."); 
         const form = new FormData();
         form.append('image', fs.createReadStream(filePath));
@@ -141,41 +189,84 @@ app.post("/recognize-guest", upload.single("image"), async (req, res) => {
         const data = await pyRes.json();
         console.log("🤖 AI Response:", JSON.stringify(data)); 
 
-        if (data.match && data.name) {
+        if ((data.status === 'matched' || data.match === true) && data.name) {
+            
             let meta = JSON.parse(fs.readFileSync(META_FILE));
-            // Find matched name (case insensitive)
-            const foundName = Object.keys(meta).find(key => key.toLowerCase() === data.name.toLowerCase());
-            const guestData = foundName ? meta[foundName] : null;
+            const aiNameClean = data.name.trim().toLowerCase();
+            stats.lastScanned = data.name;
 
-            if (!guestData) return res.json({ status: "matched", name: data.name, warning: "Not in list" });
+            const foundKey = Object.keys(meta).find(key => key.toLowerCase() === aiNameClean);
+            const guestData = foundKey ? meta[foundKey] : null;
 
-            // 👇 MARK AS ENTERED AUTOMATICALLY
-            meta[foundName].entered = true;
+            if (!guestData) {
+                // STATS: FAILURE (AI saw face, but not in DB)
+                stats.failed++;
+                stats.recentFailures.unshift({ time: new Date().toLocaleTimeString(), name: data.name });
+                if (stats.recentFailures.length > 10) stats.recentFailures.pop();
+
+                return res.json({ 
+                    status: "matched", 
+                    name: data.name, 
+                    seat: "Check List",
+                    entered: false 
+                });
+            }
+
+            // STATS: SUCCESS
+            stats.success++;
+
+            // Safety Check: Already Entered?
+            if (guestData.entered) {
+                console.log(`⚠️ ${foundKey} scanned again. Skipping WhatsApp.`);
+                return res.json({ 
+                    status: "matched", 
+                    name: foundKey, 
+                    seat: guestData.seat || "General",
+                    entered: true,
+                    message: "Welcome back!" 
+                });
+            }
+
+            // MARK ENTERED
+            meta[foundKey].entered = true;
             fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
 
             const cleanPhone = formatPhoneNumber(guestData.phone);
-            const seatNumber = guestData.seat || "Assigned on arrival";
+            const seatNumber = guestData.seat || "General";
             const chatId = `${cleanPhone}@c.us`;
-            const caption = `Dear ${foundName} San\n\n *Your Seat Number is: ${seatNumber}*📍\n\nEnjoy the event!`;
+            const caption = `Dear ${foundKey} \n\n✅ *Access Granted*\n📍 *Seat:* ${seatNumber}\n\nEnjoy the event!`;
 
-            try {
-                const media = await MessageMedia.fromFilePath(filePath);
-                await client.sendMessage(chatId, media, { caption });
-                res.json({ status: "matched", name: foundName, phone: cleanPhone, seat: seatNumber, messageSent: true });
-            } catch (waErr) {
-                res.json({ status: "matched", name: foundName, error: "WhatsApp failed" });
+            if (isWhatsAppReady) {
+                try {
+                    const media = await MessageMedia.fromFilePath(filePath);
+                    client.sendMessage(chatId, media, { caption }).catch(e => console.error("WA Msg Error:", e));
+                } catch (waErr) {
+                    console.error("WA Media Error:", waErr);
+                }
             }
+
+            res.json({ 
+                status: "matched", 
+                name: foundKey, 
+                phone: cleanPhone, 
+                seat: seatNumber, 
+                entered: true 
+            });
+
         } else {
+            // STATS: FAILURE (No face / Unknown)
+            stats.failed++;
             res.json({ status: "unknown" });
         }
     } catch (err) {
+        console.error("🔥 Server Error:", err.message);
         res.status(500).json({ error: err.message });
     } finally {
         try { fs.unlinkSync(filePath); } catch (e) { }
     }
 });
 
-// 6. UPLOAD EXCEL
+// 4. UPLOAD EXCEL
 app.post("/upload-excel", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error" });
     const tempFilePath = req.file.path;
@@ -193,7 +284,6 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
             const seat = row.Seat || row["Seat Number"] || "General";
 
             if (name && phone) {
-                // Keep existing "entered" status if updating, otherwise default to false
                 const existingEntry = meta[name];
                 meta[name] = { 
                     phone: formatPhoneNumber(phone), 
@@ -210,11 +300,6 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
     } finally {
         try { fs.unlinkSync(tempFilePath); } catch (e) { }
     }
-});
-
-// 7. BULK BLAST (EXCEL URL MODE)
-app.post("/send-bulk", upload.single("file"), async (req, res) => {
-    // ... (Keep your existing bulk blast code here, no changes needed) ...
 });
 
 app.listen(CONFIG.PORT, () => {

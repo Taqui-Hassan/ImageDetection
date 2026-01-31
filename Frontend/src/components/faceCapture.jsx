@@ -15,12 +15,36 @@ export default function FaceCapture() {
   useEffect(() => {
     let currentStream = null;
     const startCamera = async () => {
-        if (videoRef.current?.srcObject) videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+        // Stop any existing tracks before starting a new one
+        if (videoRef.current?.srcObject) {
+            videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+        }
+
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
-            if (videoRef.current) videoRef.current.srcObject = stream;
+            // ⚡ HERE IS THE HD FIX ⚡
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode,
+                    width: { min: 1280, ideal: 1920, max: 2560 }, // Force 1080p
+                    height: { min: 720, ideal: 1080, max: 1440 }
+                } 
+            });
+
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
             currentStream = stream;
-        } catch (err) { console.error(err); }
+        } catch (err) { 
+            console.error("Camera Error:", err); 
+            // Fallback to basic constraints if HD fails on old phones
+            try {
+                const lowStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+                if (videoRef.current) videoRef.current.srcObject = lowStream;
+                currentStream = lowStream;
+            } catch (e) {
+                console.error("Camera totally failed", e);
+            }
+        }
     };
     startCamera();
     return () => currentStream?.getTracks().forEach(t => t.stop());
@@ -28,23 +52,35 @@ export default function FaceCapture() {
 
   const recognizeFace = async () => {
     if (!videoRef.current) return;
-    setLoading(true); setResult(null);
+    setLoading(true); 
+    setResult(null);
+    
     const canvas = canvasRef.current;
+    // Set canvas to match the ACTUAL video resolution (High Res)
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
+    
+    // Draw full resolution image
     canvas.getContext("2d").drawImage(videoRef.current, 0, 0);
     
+    // Convert to Highest Quality Blob (0.95)
     canvas.toBlob(async (blob) => {
       const formData = new FormData();
       formData.append("image", blob, "capture.jpg");
+      
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL}/recognize-guest`, {
-            method: "POST", headers: { "ngrok-skip-browser-warning": "true" }, body: formData
+            method: "POST", 
+            headers: { "ngrok-skip-browser-warning": "true" }, 
+            body: formData
         });
         setResult(await res.json());
-      } catch (err) { setResult({ error: "System Offline" }); } 
-      finally { setLoading(false); }
-    }, "image/jpeg");
+      } catch (err) { 
+        setResult({ error: "System Offline" }); 
+      } finally { 
+        setLoading(false); 
+      }
+    }, "image/jpeg", 0.95); // ⚡ 95% Quality JPEG
   };
 
   return (
@@ -69,7 +105,7 @@ export default function FaceCapture() {
             {/* Overlay Grid */}
             <div className="absolute inset-0 border border-slate-500/20 m-4 rounded pointer-events-none"></div>
             
-            {/* Scanning Animation (Only when sending) */}
+            {/* Scanning Animation */}
             {loading && (
                 <div className="absolute inset-0 z-10">
                     <div className="absolute inset-0 bg-blue-500/10 animate-pulse"></div>
@@ -79,7 +115,7 @@ export default function FaceCapture() {
         </div>
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Status Message (The Relief Message) */}
+        {/* Status Message */}
         {loading && (
             <div className="mt-3 flex items-center justify-center gap-2 text-blue-400 animate-pulse">
                 <CloudUploadIcon fontSize="small" />
@@ -114,6 +150,8 @@ export default function FaceCapture() {
                         {result.name && <p className="text-xl font-bold text-white mt-1">Welcome {result.name} San</p>}
                         {result.seat && <p className="text-sm text-slate-400 font-mono">Your SEAT: <span className="text-white">{result.seat}</span></p>}
                         
+                        {/* 🛑 Prevent Duplicate Message 🛑 */}
+                        {result.message && <p className="text-yellow-400 text-xs mt-1 font-bold">{result.message}</p>}
                     </div>
                 </div>
             </div>

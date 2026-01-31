@@ -1,8 +1,7 @@
-import React, { useRef, useState, useCallback } from 'react';
-import Webcam from 'react-webcam';
-import axios from 'axios';
+import React, { useState } from 'react';
 
-// --- IMPORTS ---
+// --- COMPONENTS ---
+import FaceCapture from './components/faceCapture'; 
 import GuestList from './components/guestList'; 
 import UploadExcel from './components/UploadExcel'; 
 import BulkSender from './components/bulkSender';
@@ -10,15 +9,11 @@ import SystemStatus from './components/systemStatus';
 
 // ICONS
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import PersonIcon from '@mui/icons-material/Person';
-import ReplayIcon from '@mui/icons-material/Replay';
-import LockIcon from '@mui/icons-material/Lock';
-import LogoutIcon from '@mui/icons-material/Logout';
 import SendIcon from '@mui/icons-material/Send';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ListAltIcon from '@mui/icons-material/ListAlt';
-import CameraswitchIcon from '@mui/icons-material/Cameraswitch'; // 👈 NEW ICON
+import LogoutIcon from '@mui/icons-material/Logout';
+import LockIcon from '@mui/icons-material/Lock';
 
 export default function App() {
   // --- AUTH STATE ---
@@ -26,23 +21,18 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  // --- APP STATE ---
-  const webcamRef = useRef(null);
+  // --- TAB STATE ---
   const [activeTab, setActiveTab] = useState('scan');
-  const [scanResult, setScanResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  
-  // 👇 CAMERA FLIP STATE (Restored)
-  const [facingMode, setFacingMode] = useState("environment");
 
   // --- LOGIN HANDLER ---
   const handleLogin = (e) => {
     e.preventDefault();
+    // Get password from .env
     const appPassword = import.meta.env.VITE_APP_LOGIN_PASSWORD;
 
     if (!appPassword) {
         console.error("⚠️ VITE_APP_LOGIN_PASSWORD is missing in .env file!");
-        setError("System Error: Password Config Missing");
+        setError("Config Error: Check .env");
         return;
     }
 
@@ -54,43 +44,11 @@ export default function App() {
     }
   };
 
-  // --- TOGGLE CAMERA FUNCTION ---
-  const toggleCamera = useCallback(() => {
-    setFacingMode(prev => prev === "user" ? "environment" : "user");
-  }, []);
-
-  // --- CAPTURE HANDLER ---
-  const capture = useCallback(async () => {
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (!imageSrc) return;
-
-    setLoading(true);
-    setScanResult(null);
-
-    const blob = await fetch(imageSrc).then(res => res.blob());
-    const formData = new FormData();
-    formData.append('image', blob, 'capture.jpg');
-
-    try {
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/recognize-guest`, formData, {
-        headers: { 
-            'Content-Type': 'multipart/form-data',
-            "ngrok-skip-browser-warning": "true" 
-        }
-      });
-      setScanResult(res.data);
-    } catch (err) {
-      console.error(err);
-      alert("Backend Error. Is Python running?");
-    } finally {
-      setLoading(false);
-    }
-  }, [webcamRef]);
-
   // --- RENDER: LOGIN SCREEN ---
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        {/* Background Decoration */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
         
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm relative z-10">
@@ -135,7 +93,6 @@ export default function App() {
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-             
               <div>
                 <h1 className="font-bold text-sm sm:text-base leading-none">Entry OS</h1>
                 <SystemStatus /> 
@@ -149,6 +106,7 @@ export default function App() {
             </button>
           </div>
 
+          {/* TABS SCROLLABLE */}
           <div className="flex overflow-x-auto gap-1 pb-3 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
             <TabButton active={activeTab === 'scan'} onClick={() => setActiveTab('scan')} icon={<CameraAltIcon fontSize="small"/>} label="Scanner" />
             <TabButton active={activeTab === 'guests'} onClick={() => setActiveTab('guests')} icon={<ListAltIcon fontSize="small"/>} label="Guest List" />
@@ -158,133 +116,44 @@ export default function App() {
         </div>
       </nav>
 
-      {/* --- MAIN CONTENT --- */}
+      {/* --- MAIN CONTENT AREA --- */}
       <main className="max-w-5xl mx-auto p-4 animate-fade-in">
         
-        {/* VIEW: SCANNER */}
+        {/* TAB 1: HD SCANNER */}
         {activeTab === 'scan' && (
           <div className="max-w-xl mx-auto mt-4">
-            
-            {/* CAMERA STATE */}
-            {!scanResult && (
-              <>
-                <div className="bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative aspect-[4/3] sm:aspect-video group">
-                  <Webcam
-                    audio={false}
-                    ref={webcamRef}
-                    screenshotFormat="image/jpeg"
-                    className="w-full h-full object-cover"
-                    // 👇 UPDATED TO USE STATE VARIABLE
-                    videoConstraints={{ facingMode: facingMode }} 
-                  />
-                  
-                  {/* Scanner Overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-64 h-64 border-2 border-blue-500/50 rounded-xl relative">
-                      <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-blue-400 -mt-1 -ml-1"></div>
-                      <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-blue-400 -mt-1 -mr-1"></div>
-                      <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-blue-400 -mb-1 -ml-1"></div>
-                      <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-blue-400 -mb-1 -mr-1"></div>
-                    </div>
-                  </div>
-
-                  {/* 👇 FLIP CAMERA BUTTON (Top Right) 👇 */}
-                  <div className="absolute top-4 right-4 z-10">
-                    <button 
-                        onClick={toggleCamera}
-                        className="bg-black/50 hover:bg-black/80 text-white p-3 rounded-full backdrop-blur-sm border border-white/10 transition-all shadow-lg"
-                    >
-                        <CameraswitchIcon />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex justify-center">
-                  <button
-                    onClick={capture}
-                    disabled={loading}
-                    className="w-full max-w-sm bg-white text-slate-900 rounded-xl px-8 py-5 font-bold text-lg shadow-xl shadow-blue-900/10 active:scale-95 transition-all hover:bg-slate-100 flex items-center justify-center gap-3"
-                  >
-                    {loading ? (
-                      <span className="animate-pulse">Processing...</span>
-                    ) : (
-                      <>
-                        <CameraAltIcon /> SCAN FACE
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* RESULT STATE: MATCH FOUND */}
-            {scanResult && scanResult.status === 'matched' && (
-              <div className="bg-emerald-600 rounded-3xl p-1 shadow-[0_0_50px_rgba(16,185,129,0.3)] mt-4">
-                <div className="bg-slate-900 rounded-[20px] p-8 text-center min-h-[400px] flex flex-col items-center justify-center">
-                  
-                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
-                    <CheckCircleIcon className="text-emerald-400" style={{ fontSize: 48 }} />
-                  </div>
-
-                  <h2 className="text-3xl font-bold text-white mb-2">
-                    {scanResult.name}
-                  </h2>
-                  
-                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20 text-emerald-400 text-sm font-medium mb-8">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-                    Access Granted
-                  </div>
-
-                  <div className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl p-6 mb-8">
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Assigned Seat</p>
-                    <p className="text-7xl font-black text-white tracking-tighter">
-                      {scanResult.seat || "A-01"}
-                    </p>
-                  </div>
-
-                  <button 
-                    onClick={() => setScanResult(null)}
-                    className="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold py-4 rounded-xl transition-all flex items-center justify-center gap-2"
-                  >
-                    <ReplayIcon /> Next Guest
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* RESULT STATE: FAILED */}
-            {scanResult && scanResult.status !== 'matched' && (
-              <div className="bg-red-600 rounded-3xl p-1 shadow-[0_0_50px_rgba(239,68,68,0.3)] mt-4">
-                <div className="bg-slate-900 rounded-[20px] p-8 text-center min-h-[300px] flex flex-col items-center justify-center">
-                  <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6">
-                    <PersonIcon className="text-red-500" style={{ fontSize: 48 }} />
-                  </div>
-                  <h2 className="text-2xl font-bold text-white mb-2">Unknown Guest</h2>
-                  <p className="text-slate-400 mb-8">Face not found in database.</p>
-                  
-                  <button 
-                    onClick={() => setScanResult(null)}
-                    className="w-full bg-white text-slate-900 font-bold py-4 rounded-xl transition-all hover:bg-slate-200"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* 👇 THIS IS THE NEW COMPONENT 👇 */}
+            <FaceCapture />
           </div>
         )}
 
-        {/* OTHER VIEWS */}
-        {activeTab === 'guests' && <div className="mt-4"><GuestList /></div>}
-        {activeTab === 'upload' && <div className="mt-4"><UploadExcel /></div>}
-        {activeTab === 'bulk' && <div className="mt-4"><BulkSender /></div>}
+        {/* TAB 2: GUEST LIST */}
+        {activeTab === 'guests' && (
+           <div className="mt-4">
+             <GuestList />
+           </div>
+        )}
+
+        {/* TAB 3: UPLOAD EXCEL */}
+        {activeTab === 'upload' && (
+           <div className="mt-4">
+             <UploadExcel />
+           </div>
+        )}
+
+        {/* TAB 4: WHATSAPP BULK SENDER */}
+        {activeTab === 'bulk' && (
+           <div className="mt-4">
+             <BulkSender />
+           </div>
+        )}
 
       </main>
     </div>
   );
 }
 
-// --- TAB BUTTON COMPONENT ---
+// --- HELPER: TAB BUTTON ---
 function TabButton({ active, onClick, icon, label }) {
     return (
         <button 
