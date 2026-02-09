@@ -10,25 +10,46 @@ export default function BulkSender({ onBack }) {
 
     const handleBlast = async () => {
         if (!file) return;
-        setLoading(true); setReport(null);
+        setLoading(true); 
+        setReport(null);
+        
         const formData = new FormData();
         formData.append("file", file);
 
         try {
             const res = await fetch(`${import.meta.env.VITE_API_URL}/send-bulk`, {
-                method: "POST", headers: { "ngrok-skip-browser-warning": "true" }, body: formData
+                method: "POST", 
+                headers: { "ngrok-skip-browser-warning": "true" }, 
+                body: formData
             });
             const data = await res.json();
-            setReport(data);
-        } catch (err) { setReport({ status: "error", message: "Server Connection Failed" }); } 
-        finally { setLoading(false); }
+            
+            // Backend returns { sent: X, failed: Y }
+            // We calculate Total here for display
+            if (data.status === 'success') {
+                setReport({
+                    ...data,
+                    total: (data.sent || 0) + (data.failed || 0)
+                });
+            } else {
+                setReport(data);
+            }
+
+        } catch (err) { 
+            setReport({ status: "error", message: "Server Connection Failed" }); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     return (
         <div className="animate-fade-in">
-            <button onClick={onBack} className="mb-4 text-slate-400 hover:text-white transition-colors">
-                 ← Return to Modules
-            </button>
+            {/* If onBack exists, show back button (Optional) */}
+            {onBack && (
+                <button onClick={onBack} className="mb-4 text-slate-400 hover:text-white transition-colors">
+                     ← Return to Modules
+                </button>
+            )}
 
             <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-2xl">
                 {/* Header */}
@@ -38,7 +59,7 @@ export default function BulkSender({ onBack }) {
                     </div>
                     <div>
                         <h2 className="text-lg font-bold text-white">Direct Broadcast Protocol</h2>
-                        <p className="text-xs text-slate-400">Mass messaging engine. Excel + Image URL support.</p>
+                        <p className="text-xs text-slate-400">Auto-sends custom images from Excel <b>ImageURL</b> column.</p>
                     </div>
                 </div>
 
@@ -55,8 +76,8 @@ export default function BulkSender({ onBack }) {
                         
                         {/* Format Guide */}
                         <div className="mt-4 flex flex-wrap justify-center gap-2">
-                            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mt-1">Format:</span>
-                            {['Name', 'Phone','ImageURL','Seat'].map(h => (
+                            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mt-1">Required Columns:</span>
+                            {['Name', 'Phone', 'ImageURL', 'Seat'].map(h => (
                                 <span key={h} className="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded border border-slate-700 font-mono">
                                     {h}
                                 </span>
@@ -69,7 +90,9 @@ export default function BulkSender({ onBack }) {
                             <div className="h-2 w-full bg-slate-700 rounded-full overflow-hidden">
                                 <div className="h-full bg-green-500 animate-progress w-full origin-left"></div>
                             </div>
-                            <p className="text-xs text-green-500 mt-2 text-center font-mono">TRANSMITTING DATA PACKETS...</p>
+                            <p className="text-xs text-green-500 mt-2 text-center font-mono animate-pulse">
+                                DOWNLOADING IMAGES & SENDING MESSAGES...
+                            </p>
                         </div>
                     )}
 
@@ -78,7 +101,7 @@ export default function BulkSender({ onBack }) {
                         disabled={!file || loading}
                         className="w-full bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
                     >
-                        {loading ? "SENDING..." : (
+                        {loading ? "PROCESSING BATCH..." : (
                             <>
                                 <SendIcon fontSize="small" /> INITIATE BROADCAST
                             </>
@@ -94,7 +117,7 @@ export default function BulkSender({ onBack }) {
                                     <div className="grid grid-cols-3 gap-4 text-center mt-2">
                                         <div className="bg-slate-900/50 p-2 rounded">
                                             <div className="text-xl font-bold text-white">{report.total}</div>
-                                            <div className="text-[10px] text-slate-400 uppercase">Targeted</div>
+                                            <div className="text-[10px] text-slate-400 uppercase">Total</div>
                                         </div>
                                         <div className="bg-slate-900/50 p-2 rounded">
                                             <div className="text-xl font-bold text-green-400">{report.sent}</div>

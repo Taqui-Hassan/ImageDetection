@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import HourglassTopIcon from '@mui/icons-material/HourglassTop'; // New Icon
 
 export default function UploadExcel() {
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
-    const [status, setStatus] = useState(null); // 'success' | 'error'
+    const [status, setStatus] = useState(null); // 'success', 'error', 'processing'
     const [message, setMessage] = useState("");
 
     const handleFileChange = (e) => {
@@ -23,6 +24,7 @@ export default function UploadExcel() {
         }
 
         setUploading(true);
+        setStatus(null);
         const formData = new FormData();
         formData.append("file", file);
 
@@ -38,8 +40,9 @@ export default function UploadExcel() {
 
             if (data.status === "success") {
                 setStatus("success");
-                setMessage(`Successfully enrolled ${data.enrolled} guests!`);
-                setFile(null); // Clear input
+                // The backend now sends a message about background processing
+                setMessage(data.message || "Enrollment started! Check terminal for download progress.");
+                setFile(null); 
             } else {
                 throw new Error(data.message || "Upload failed");
             }
@@ -57,7 +60,8 @@ export default function UploadExcel() {
             <div className="text-center mb-8">
                 <CloudUploadIcon className="text-blue-500 mb-4" style={{ fontSize: 60 }} />
                 <h2 className="text-2xl font-bold text-white mb-2">Import Guest List</h2>
-                <p className="text-slate-400">Upload an Excel (.xlsx) file with columns: <b>Name, Phone, ImageURL, Seat</b></p>
+                <p className="text-slate-400">Upload Excel with: <b>Name, Phone, ImageURL, Seat</b></p>
+                <p className="text-xs text-slate-500 mt-1">(Photos will auto-download in background)</p>
             </div>
 
             <div className="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:bg-slate-700/30 transition-colors relative">
@@ -83,9 +87,13 @@ export default function UploadExcel() {
 
             {/* STATUS MESSAGES */}
             {status === 'success' && (
-                <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-3 text-green-400">
-                    <CheckCircleIcon />
-                    <span>{message}</span>
+                <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-start gap-3 text-green-400">
+                    <CheckCircleIcon className="mt-1" />
+                    <div>
+                        <p className="font-bold">Upload Successful!</p>
+                        <p className="text-sm opacity-80">{message}</p>
+                        <p className="text-xs text-slate-400 mt-2">👉 <b>Reminder:</b> Restart Python AI after downloads finish.</p>
+                    </div>
                 </div>
             )}
 
@@ -99,9 +107,13 @@ export default function UploadExcel() {
             <button
                 onClick={handleUpload}
                 disabled={uploading || !file}
-                className="w-full mt-6 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="w-full mt-6 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex justify-center items-center gap-2"
             >
-                {uploading ? "Uploading..." : "Upload List"}
+                {uploading ? (
+                    <>
+                        <HourglassTopIcon className="animate-spin" /> Processing...
+                    </>
+                ) : "Start Auto-Enrollment"}
             </button>
         </div>
     );

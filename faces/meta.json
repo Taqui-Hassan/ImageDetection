@@ -7,12 +7,12 @@
   "Hardayal": {
     "phone": "919988251524",
     "seat": "100",
-    "entered": true
+    "entered": false
   },
   "Ashish": {
     "phone": "918447097602",
     "seat": "200",
-    "entered": true
+    "entered": false
   },
   "Vikas": {
     "phone": "918510904265",
@@ -27,7 +27,7 @@
   "Ashwini": {
     "phone": "917408477772",
     "seat": "500",
-    "entered": true
+    "entered": false
   },
   "Naveen": {
     "phone": "919818772335",
@@ -37,51 +37,41 @@
   "Bose": {
     "phone": "919811320331",
     "seat": "1000",
-    "entered": true
+    "entered": false
   },
   "Anas": {
     "phone": "919871984893",
     "seat": "2400",
-    "entered": true
-  },
-  "Ariba": {
-    "phone": "918800918266",
-    "seat": "21000",
-    "entered": true
-  },
-  "Sadia": {
-    "phone": "919717347203",
-    "seat": "999",
-    "entered": true
+    "entered": false
   },
   "Shravan": {
     "phone": "919480707738",
     "seat": "9990",
-    "entered": true
+    "entered": false
   },
   "Anil": {
     "phone": "917471120817",
     "seat": "41",
-    "entered": true
+    "entered": false
   },
   "Arpit": {
     "phone": "919289320887",
     "seat": "2311",
-    "entered": true
+    "entered": false
   },
   "Shaikh": {
     "phone": "919650285112",
     "seat": "2119",
-    "entered": true
+    "entered": false
   },
   "Venkat": {
     "phone": "919911455935",
     "seat": "600",
-    "entered": true
+    "entered": false
   },
   "taqui": {
     "phone": "918800918266",
     "seat": "20",
-    "entered": true
+    "entered": false
   }
 }
