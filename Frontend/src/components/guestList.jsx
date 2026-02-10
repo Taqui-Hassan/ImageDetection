@@ -1,186 +1,182 @@
-import React, { useState } from 'react';
-import DeleteIcon from '@mui/icons-material/Delete';
-import LockIcon from '@mui/icons-material/Lock';
+import React, { useEffect, useState } from 'react';
 import SearchIcon from '@mui/icons-material/Search';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import CancelIcon from '@mui/icons-material/Cancel';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 export default function GuestList() {
-    const [isUnlocked, setIsUnlocked] = useState(false);
-    const [password, setPassword] = useState("");
     const [guests, setGuests] = useState([]);
+    const [search, setSearch] = useState("");
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
-    
-    // 👇 NEW: Search State
-    const [searchTerm, setSearchTerm] = useState("");
 
-    const fetchGuests = (pwd) => {
-        setLoading(true); 
-        setError("");
-
-        // 🔒 SECURITY FIX: Client-Side Validation
-        // This ensures the password is correct BEFORE calling the backend.
-        const correctPassword = import.meta.env.VITE_GUEST_LIST_PASSWORD;
-
-        if (!correctPassword) {
-            console.error("⚠️ Missing VITE_GUEST_LIST_PASSWORD in .env");
-        }
-
-        if (pwd !== correctPassword) {
-            setError("INVALID PASSCODE");
-            setLoading(false);
-            return; // ⛔ STOP HERE! Do not fetch data.
-        }
-
-        // If password matches, proceed to fetch
-        fetch(`${import.meta.env.VITE_API_URL}/guests`, {
-            headers: { "ngrok-skip-browser-warning": "true", "x-admin-password": pwd }
-        })
-        .then(async res => {
-            if (res.status === 403) throw new Error("INVALID KEY");
-            return res.json();
-        })
-        .then(data => { setGuests(data); setIsUnlocked(true); setLoading(false); })
-        .catch(() => { setError("Data Fetch Failed"); setLoading(false); });
-    };
-
-    const handleDelete = async (name) => {
-        if (!window.confirm(`DELETE RECORD: ${name}?`)) return;
-        await fetch(`${import.meta.env.VITE_API_URL}/guests/${name}`, { method: "DELETE", headers: { "ngrok-skip-browser-warning": "true" } });
-        setGuests(prev => prev.filter(g => g.name !== name));
-    };
-
-    // 👇 Toggle Entry Status
-    const handleToggleEntry = async (name) => {
+    // 1. Fetch Guests from Backend
+    const fetchGuests = async () => {
+        setLoading(true);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/guests/${name}/toggle`, {
-                method: "PUT", headers: { "ngrok-skip-browser-warning": "true" }
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/guests`, {
+                headers: { "ngrok-skip-browser-warning": "true" }
             });
             const data = await res.json();
-            
-            // Update local state instantly
-            if (data.status === "success") {
-                setGuests(prev => prev.map(g => 
-                    g.name === name ? { ...g, entered: data.entered } : g
-                ));
-            }
-        } catch (err) { console.error("Toggle failed", err); }
+            // Sort: Entered guests first, then alphabetical
+            const sorted = data.sort((a, b) => (b.entered === a.entered) ? 0 : b.entered ? 1 : -1);
+            setGuests(sorted);
+        } catch (err) {
+            console.error("Failed to load guests", err);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // Filter guests based on search
+    useEffect(() => {
+        fetchGuests();
+        // Optional: Auto-refresh every 5 seconds to see live updates from other devices
+        const interval = setInterval(fetchGuests, 5000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // 2. The Fixed Toggle Logic (Optimistic Update)
+    const handleToggle = async (name, currentStatus) => {
+        // A. INSTANTLY flip the status in UI (User feels zero lag)
+        setGuests(prevGuests => prevGuests.map(guest => 
+            guest.name === name ? { ...guest, entered: !currentStatus } : guest
+        ));
+
+        // B. Send update to Backend silently
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/guests/${encodeURIComponent(name)}/toggle`, {
+                method: 'PUT'
+            });
+            
+            if (!res.ok) {
+                throw new Error("Server failed");
+            }
+        } catch (err) {
+            console.error("Toggle failed, reverting UI:", err);
+            // C. If server fails, FLIP IT BACK (Undo)
+            setGuests(prevGuests => prevGuests.map(guest => 
+                guest.name === name ? { ...guest, entered: currentStatus } : guest
+            ));
+            alert("Connection Error: Could not update status.");
+        }
+    };
+
+    // Filter Logic
     const filteredGuests = guests.filter(g => 
-        g.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        g.phone.includes(searchTerm)
+        g.name.toLowerCase().includes(search.toLowerCase()) || 
+        g.phone.includes(search) ||
+        g.seat.toLowerCase().includes(search.toLowerCase())
     );
 
-    // Locked View
-    if (!isUnlocked) {
-        return (
-            <div className="border border-dashed border-slate-600 rounded-xl p-8 text-center bg-slate-800/50">
-                <LockIcon className="text-slate-500 mb-2" style={{ fontSize: 40 }} />
-                <h3 className="text-lg font-bold text-slate-300">Encrypted Database</h3>
-                <p className="text-xs text-slate-500 mb-4">Enter secondary admin key to view raw data.</p>
-                <div className="flex justify-center gap-2 max-w-xs mx-auto">
-                    <input 
-                        type="password" 
-                        placeholder="List Password" 
-                        className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-white text-sm w-full focus:outline-none focus:border-blue-500"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                    />
-                    <button 
-                        onClick={() => fetchGuests(password)} 
-                        disabled={loading}
-                        className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors"
-                    >
-                        {loading ? "..." : "Unlock"}
-                    </button>
-                </div>
-                {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
-            </div>
-        );
-    }
+    const enteredCount = guests.filter(g => g.entered).length;
 
-    // Table View
     return (
-        <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-lg">
-            {/* Header with Search */}
-            <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex flex-col sm:flex-row justify-between items-center gap-3">
-                <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-200">Guest Manifest</h3>
-                    <span className="text-xs bg-blue-900 text-blue-300 px-2 py-0.5 rounded">
-                        {guests.filter(g => g.entered).length} / {guests.length} Arrived
-                    </span>
+        <div className="animate-fade-in max-w-4xl mx-auto">
+            {/* HEADER STATS */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 className="text-slate-400 text-sm font-bold uppercase tracking-wider">Total Guests</h3>
+                    <p className="text-3xl font-bold text-white mt-1">{guests.length}</p>
                 </div>
+                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg relative overflow-hidden">
+                    <div className="absolute right-0 top-0 p-4 opacity-10">
+                        <CheckCircleIcon style={{ fontSize: 80 }} />
+                    </div>
+                    <h3 className="text-green-400 text-sm font-bold uppercase tracking-wider">Checked In</h3>
+                    <p className="text-3xl font-bold text-white mt-1">{enteredCount}</p>
+                </div>
+                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+                    <h3 className="text-red-400 text-sm font-bold uppercase tracking-wider">Not Arrived</h3>
+                    <p className="text-3xl font-bold text-white mt-1">{guests.length - enteredCount}</p>
+                </div>
+            </div>
 
-                {/* 👇 SEARCH BAR */}
-                <div className="relative w-full sm:w-64">
-                    <SearchIcon className="absolute left-2 top-2 text-slate-500" fontSize="small" />
+            {/* SEARCH BAR */}
+            <div className="flex gap-4 mb-6">
+                <div className="relative flex-1">
+                    <SearchIcon className="absolute left-4 top-3.5 text-slate-400" />
                     <input 
                         type="text" 
-                        placeholder="Search Name or Phone..." 
-                        className="w-full bg-slate-800 border border-slate-700 rounded pl-8 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search by Name, Phone, or Seat..." 
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 text-white pl-12 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-md"
                     />
+                </div>
+                <button 
+                    onClick={fetchGuests} 
+                    className="bg-slate-800 hover:bg-slate-700 text-white p-3 rounded-xl border border-slate-700 transition-colors"
+                    title="Refresh List"
+                >
+                    <RefreshIcon className={loading ? "animate-spin" : ""} />
+                </button>
+            </div>
+
+            {/* GUEST LIST TABLE */}
+            <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-900/50 border-b border-slate-700 text-xs uppercase tracking-wider text-slate-400">
+                                <th className="p-4 font-semibold">Status</th>
+                                <th className="p-4 font-semibold">Name</th>
+                                <th className="p-4 font-semibold hidden md:table-cell">Phone</th>
+                                <th className="p-4 font-semibold hidden md:table-cell">Seat</th>
+                                <th className="p-4 font-semibold text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700">
+                            {filteredGuests.length > 0 ? (
+                                filteredGuests.map((guest) => (
+                                    <tr key={guest.name} className="hover:bg-slate-700/30 transition-colors group">
+                                        <td className="p-4">
+                                            {guest.entered ? (
+                                                <span className="inline-flex items-center gap-1 bg-green-500/10 text-green-400 px-2 py-1 rounded text-xs font-bold border border-green-500/20">
+                                                    <CheckCircleIcon style={{ fontSize: 14 }} /> IN
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-400 px-2 py-1 rounded text-xs font-bold border border-red-500/20">
+                                                    <CancelIcon style={{ fontSize: 14 }} /> OUT
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="p-4 font-medium text-white">
+                                            {guest.name}
+                                        </td>
+                                        <td className="p-4 text-slate-400 hidden md:table-cell font-mono text-sm">
+                                            {guest.phone}
+                                        </td>
+                                        <td className="p-4 text-slate-300 hidden md:table-cell">
+                                            {guest.seat}
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <button
+                                                onClick={() => handleToggle(guest.name, guest.entered)}
+                                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md ${
+                                                    guest.entered 
+                                                    ? 'bg-slate-700 text-slate-300 hover:bg-red-600 hover:text-white border border-slate-600'
+                                                    : 'bg-blue-600 text-white hover:bg-blue-500 hover:scale-105'
+                                                }`}
+                                            >
+                                                {guest.entered ? "Mark Out" : "Mark In"}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="5" className="p-8 text-center text-slate-500">
+                                        No guests found matching "{search}"
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
             
-            <div className="overflow-x-auto max-h-96">
-                <table className="w-full text-left text-sm text-slate-400">
-                    <thead className="bg-slate-900 text-xs uppercase font-medium text-slate-500 sticky top-0 z-10">
-                        <tr>
-                            <th className="px-6 py-3">Status</th> {/* New Column */}
-                            <th className="px-6 py-3">Name</th>
-                            <th className="px-6 py-3">Phone</th>
-                            <th className="px-6 py-3">Seat</th>
-                            <th className="px-6 py-3 text-right">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-700">
-                        {filteredGuests.map((guest, i) => (
-                            <tr key={i} className={`hover:bg-slate-700/50 transition-colors ${guest.entered ? 'bg-green-500/5' : ''}`}>
-                                
-                                {/* 👇 STATUS COLUMN (CLICK TO TOGGLE) */}
-                                <td className="px-6 py-4 cursor-pointer" onClick={() => handleToggleEntry(guest.name)}>
-                                    {guest.entered ? (
-                                        <div className="flex items-center gap-1 text-green-500 font-bold">
-                                            <CheckCircleIcon fontSize="small" />
-                                            <span className="text-xs">IN</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-1 text-slate-600 hover:text-slate-400">
-                                            <RadioButtonUncheckedIcon fontSize="small" />
-                                            <span className="text-xs">OUT</span>
-                                        </div>
-                                    )}
-                                </td>
-
-                                <td className={`px-6 py-4 font-medium ${guest.entered ? 'text-green-300' : 'text-white'}`}>
-                                    {guest.name}
-                                </td>
-                                <td className="px-6 py-4 font-mono">{guest.phone}</td>
-                                <td className="px-6 py-4">
-                                    <span className="bg-slate-700 text-white px-2 py-1 rounded text-xs">{guest.seat}</span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <button onClick={() => handleDelete(guest.name)} className="text-red-500 hover:text-red-400 hover:bg-red-500/10 p-1 rounded transition-colors">
-                                        <DeleteIcon fontSize="small" />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                        {filteredGuests.length === 0 && (
-                            <tr>
-                                <td colSpan="5" className="px-6 py-8 text-center text-slate-500 italic">
-                                    No guests found matching "{searchTerm}"
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+            <p className="text-center text-slate-500 text-xs mt-4">
+                Showing {filteredGuests.length} of {guests.length} guests. Auto-refreshes every 5s.
+            </p>
         </div>
     );
 }
