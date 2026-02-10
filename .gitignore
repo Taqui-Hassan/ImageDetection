@@ -9,3 +9,8 @@ uploads/
 *.log
 .wwebjs_cache
 oldIndex.js
+faces/
+uploads/
+*.jpg
+*.png
+*.jpeg
