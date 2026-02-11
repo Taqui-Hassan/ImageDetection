@@ -9,7 +9,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import PersonIcon from '@mui/icons-material/Person';
 
-const API_URL = 'http://localhost:8000'; // Make sure this matches backend
+const API_URL = import.meta.env.VITE_API_URL; // Make sure this matches backend
 
 export default function FaceCapture() {
     const webcamRef = useRef(null);
