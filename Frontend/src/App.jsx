@@ -40,18 +40,22 @@ export default function App() {
   useEffect(() => {
     const checkStatus = async () => {
       try {
+        console.log("📡 Frontend: Asking Backend for status..."); // <--- DEBUG LOG 1
         const res = await axios.get(`${API_URL}/system-status`);
+        
+        console.log("✅ Backend Replied:", res.data); // <--- DEBUG LOG 2
+        
         setWaConnected(res.data.whatsapp);
         setQrCode(res.data.qr);
         
-        // Auto-close modal if connected
         if (res.data.whatsapp) setShowQrModal(false);
       } catch (err) {
-        console.error("Status check failed", err);
+        console.error("❌ Frontend Connection Failed:", err.message); // <--- ERROR LOG
       }
     };
     
-    // Check every 2 seconds
+    // Check immediately, then every 2 seconds
+    checkStatus();
     const interval = setInterval(checkStatus, 2000); 
     return () => clearInterval(interval);
   }, []);
