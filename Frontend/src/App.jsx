@@ -37,20 +37,28 @@ export default function App() {
   const [showQrModal, setShowQrModal] = useState(false);
 
   // --- NEW: POLL SYSTEM STATUS ---
+  // --- NEW: POLL SYSTEM STATUS ---
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        console.log("📡 Frontend: Asking Backend for status..."); // <--- DEBUG LOG 1
-        const res = await axios.get(`${API_URL}/system-status`);
+        console.log("📡 Frontend: Asking Backend for status...");
         
-        console.log("✅ Backend Replied:", res.data); // <--- DEBUG LOG 2
+        // 👇 UPDATE THIS BLOCK 👇
+        const res = await axios.get(`${API_URL}/system-status`, {
+            headers: {
+                "ngrok-skip-browser-warning": "69420", // <--- THIS BYPASSES THE WALL
+            }
+        });
+        // 👆 END UPDATE 👆
+
+        console.log("✅ Backend Replied:", res.data);
         
         setWaConnected(res.data.whatsapp);
         setQrCode(res.data.qr);
         
         if (res.data.whatsapp) setShowQrModal(false);
       } catch (err) {
-        console.error("❌ Frontend Connection Failed:", err.message); // <--- ERROR LOG
+        console.error("❌ Frontend Connection Failed:", err.message);
       }
     };
     
