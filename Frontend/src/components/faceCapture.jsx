@@ -159,7 +159,7 @@ export default function FaceCapture() {
                 <div className="absolute inset-0 z-30 bg-green-600 flex flex-col items-center justify-center text-white animate-fade-in">
                     <CheckCircleIcon style={{ fontSize: 80 }} className="mb-4 drop-shadow-md" />
                     <h2 className="text-4xl font-bold">Welcome {detectedGuest.name} San</h2>
-                    <h2 className="text-4xl font-bold">Sear : {detectedGuest.seat} San</h2>
+                    <h2 className="text-4xl font-bold">Seat : {detectedGuest.seat}</h2>
                     <p className="opacity-80 mt-2">Processing Ticket...</p>
                 </div>
             )}
