@@ -1,173 +1,171 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import Webcam from 'react-webcam';
+import axios from 'axios';
+import GuestList from './components/GuestList';
+import QRCode from 'react-qr-code'; // Ensure you have this: npm install react-qr-code
 
-// --- COMPONENTS ---
-import FaceCapture from './components/faceCapture'; 
-import GuestList from './components/guestList'; 
-import UploadExcel from './components/UploadExcel'; 
-import BulkSender from './components/bulkSender';
-import SystemStatus from './components/systemStatus';
+// --- CONFIGURATION ---
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// ICONS
-import CameraAltIcon from '@mui/icons-material/CameraAlt';
-import SendIcon from '@mui/icons-material/Send';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import ListAltIcon from '@mui/icons-material/ListAlt';
-import LogoutIcon from '@mui/icons-material/Logout';
-import LockIcon from '@mui/icons-material/Lock';
+function App() {
+  const webcamRef = useRef(null);
+  const [scannedName, setScannedName] = useState(null);
+  const [status, setStatus] = useState("Ready to Scan");
+  const [loading, setLoading] = useState(false);
+  const [autoMode, setAutoMode] = useState(true);
+  
+  // WHATSAPP STATES
+  const [waConnected, setWaConnected] = useState(false);
+  const [qrCode, setQrCode] = useState("");
+  const [showQrModal, setShowQrModal] = useState(false); // 🆕 Control visibility
 
-export default function App() {
-  // --- AUTH STATE ---
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  // --- POLL SYSTEM STATUS (Check for QR / Connection) ---
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/system-status`);
+        setWaConnected(res.data.whatsapp);
+        setQrCode(res.data.qr);
+        
+        // Auto-close modal if connected
+        if (res.data.whatsapp) setShowQrModal(false);
+      } catch (err) {
+        console.error("Status check failed", err);
+      }
+    };
+    
+    const interval = setInterval(checkStatus, 2000); // Check every 2 seconds
+    return () => clearInterval(interval);
+  }, []);
 
-  // --- TAB STATE ---
-  const [activeTab, setActiveTab] = useState('scan');
+  // --- CAPTURE & SEND TO AI ---
+  const captureAndCheck = async () => {
+    if (!webcamRef.current || loading) return;
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (!imageSrc) return;
 
-  // --- LOGIN HANDLER ---
-  const handleLogin = (e) => {
-    e.preventDefault();
-    // Get password from .env
-    const appPassword = import.meta.env.VITE_APP_LOGIN_PASSWORD;
+    setLoading(true);
+    setStatus("🔍 Analyzing...");
 
-    if (!appPassword) {
-        console.error("⚠️ VITE_APP_LOGIN_PASSWORD is missing in .env file!");
-        setError("Config Error: Check .env");
-        return;
-    }
+    try {
+      const blob = await (await fetch(imageSrc)).blob();
+      const formData = new FormData();
+      formData.append('image', blob, 'capture.jpg');
 
-    if (password === appPassword) { 
-      setIsLoggedIn(true);
-      setError("");
-    } else {
-      setError("Incorrect Passcode");
+      const res = await axios.post(`${API_URL}/recognize-guest`, formData);
+
+      if (res.data.status === 'matched') {
+        setScannedName(res.data.name);
+        setStatus(`✅ Welcome, ${res.data.name}!`);
+        new Audio('/success.mp3').play().catch(() => {});
+      } else {
+        setStatus("❌ Face not recognized");
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus("⚠️ Server Error");
+    } finally {
+      setLoading(false);
+      if (autoMode) setTimeout(() => captureAndCheck(), 2000);
     }
   };
 
-  // --- RENDER: LOGIN SCREEN ---
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        {/* Background Decoration */}
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+  useEffect(() => {
+    if (autoMode) {
+      const interval = setInterval(() => {
+        if (!loading) captureAndCheck();
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [autoMode, loading]);
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-white font-sans p-6 relative">
+      
+      {/* HEADER */}
+      <header className="mb-8 flex justify-between items-center bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700">
+        <div>
+          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+            🚀 Event Manager AI
+          </h1>
+          <p className="text-slate-400 text-xs">Photoroom Edition</p>
+        </div>
         
-        <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm relative z-10">
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3">
-              <LockIcon className="text-white" style={{ fontSize: 32 }} />
-            </div>
-          </div>
-          
-          <h1 className="text-2xl font-bold text-center text-white mb-1">Event Entry OS</h1>
-          <p className="text-slate-400 text-center text-sm mb-8">Authorized Personnel Only</p>
-          
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <input
-                type="password"
-                placeholder="Enter Access Code"
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-center tracking-widest"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            {error && <div className="text-red-400 text-xs text-center font-medium">{error}</div>}
+        <div className="flex items-center gap-4">
+            {/* WHATSAPP BUTTON */}
             <button 
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+                onClick={() => !waConnected && setShowQrModal(true)}
+                className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 ${
+                    waConnected 
+                    ? 'bg-green-500/20 border-green-500 text-green-400 cursor-default' 
+                    : 'bg-red-500/20 border-red-500 text-red-400 hover:bg-red-500/30'
+                }`}
             >
-              Unlock Dashboard
+                {waConnected ? "🟢 WhatsApp Active" : "🔴 Connect WhatsApp"}
             </button>
-          </form>
+
+            <button 
+                onClick={() => setAutoMode(!autoMode)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${autoMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-slate-700 hover:bg-slate-600'}`}
+            >
+                {autoMode ? "🔄 Auto-Scan ON" : "⏸️ Paused"}
+            </button>
+        </div>
+      </header>
+
+      {/* 🟢 QR CODE MODAL (The Fix) */}
+      {showQrModal && !waConnected && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center backdrop-blur-sm">
+            <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center relative animate-fade-in">
+                <button 
+                    onClick={() => setShowQrModal(false)}
+                    className="absolute top-2 right-2 text-gray-500 hover:text-black font-bold text-xl px-2"
+                >
+                    ✕
+                </button>
+                <h2 className="text-slate-900 text-xl font-bold mb-2">Scan with WhatsApp</h2>
+                <p className="text-slate-500 text-xs mb-4">Open WhatsApp on your phone {'>'} Settings {'>'} Linked Devices</p>
+                
+                <div className="bg-white p-2 inline-block border-2 border-slate-200 rounded-lg">
+                    {qrCode ? (
+                        <QRCode value={qrCode} size={256} />
+                    ) : (
+                        <div className="w-64 h-64 flex items-center justify-center text-slate-400 animate-pulse bg-slate-100 rounded">
+                            Loading QR...
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* MAIN GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          <div className="bg-slate-800 p-4 rounded-2xl shadow-2xl border border-slate-700 relative overflow-hidden group">
+            <Webcam
+              audio={false}
+              ref={webcamRef}
+              screenshotFormat="image/jpeg"
+              className="w-full rounded-xl border-2 border-slate-600 group-hover:border-blue-500 transition-colors"
+              videoConstraints={{ facingMode: "user" }}
+            />
+            {loading && <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan z-20" />}
+          </div>
+          {scannedName && (
+             <div className="bg-gradient-to-r from-green-900/50 to-slate-800 p-6 rounded-2xl border border-green-500/30 animate-fade-in">
+               <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Just Verified</h3>
+               <p className="text-3xl font-bold text-white">{scannedName}</p>
+             </div>
+          )}
+        </div>
+
+        <div className="lg:col-span-8">
+           <GuestList />
         </div>
       </div>
-    );
-  }
-
-  // --- RENDER: MAIN DASHBOARD ---
-  return (
-    <div className="min-h-screen bg-slate-950 text-white font-sans">
-      
-      {/* --- GLASS NAVBAR --- */}
-      <nav className="sticky top-0 z-50 backdrop-blur-md bg-slate-900/80 border-b border-white/5">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div>
-                <h1 className="font-bold text-sm sm:text-base leading-none">Entry OS</h1>
-                <SystemStatus /> 
-              </div>
-            </div>
-            <button 
-              onClick={() => setIsLoggedIn(false)}
-              className="p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-            >
-              <LogoutIcon fontSize="small" />
-            </button>
-          </div>
-
-          {/* TABS SCROLLABLE */}
-          <div className="flex overflow-x-auto gap-1 pb-3 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
-            <TabButton active={activeTab === 'scan'} onClick={() => setActiveTab('scan')} icon={<CameraAltIcon fontSize="small"/>} label="Scanner" />
-            <TabButton active={activeTab === 'guests'} onClick={() => setActiveTab('guests')} icon={<ListAltIcon fontSize="small"/>} label="Guest List" />
-            <TabButton active={activeTab === 'upload'} onClick={() => setActiveTab('upload')} icon={<CloudUploadIcon fontSize="small"/>} label="Import" />
-            <TabButton active={activeTab === 'bulk'} onClick={() => setActiveTab('bulk')} icon={<SendIcon fontSize="small"/>} label="WhatsApp" />
-          </div>
-        </div>
-      </nav>
-
-      {/* --- MAIN CONTENT AREA --- */}
-      <main className="max-w-5xl mx-auto p-4 animate-fade-in">
-        
-        {/* TAB 1: HD SCANNER */}
-        {activeTab === 'scan' && (
-          <div className="max-w-xl mx-auto mt-4">
-            {/* 👇 THIS IS THE NEW COMPONENT 👇 */}
-            <FaceCapture />
-          </div>
-        )}
-
-        {/* TAB 2: GUEST LIST */}
-        {activeTab === 'guests' && (
-           <div className="mt-4">
-             <GuestList />
-           </div>
-        )}
-
-        {/* TAB 3: UPLOAD EXCEL */}
-        {activeTab === 'upload' && (
-           <div className="mt-4">
-             <UploadExcel />
-           </div>
-        )}
-
-        {/* TAB 4: WHATSAPP BULK SENDER */}
-        {activeTab === 'bulk' && (
-           <div className="mt-4">
-             <BulkSender />
-           </div>
-        )}
-
-      </main>
     </div>
   );
 }
 
-// --- HELPER: TAB BUTTON ---
-function TabButton({ active, onClick, icon, label }) {
-    return (
-        <button 
-            onClick={onClick}
-            className={`
-                flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap min-w-max
-                ${active 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
-                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-white border border-transparent hover:border-slate-700'
-                }
-            `}
-        >
-            {icon}
-            <span>{label}</span>
-        </button>
-    );
-}
+export default App;
