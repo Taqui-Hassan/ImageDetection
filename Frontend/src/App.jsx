@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import axios from 'axios';
-import GuestList from './components/GuestList';
+import GuestList from './components/guestList';
 import QRCode from 'react-qr-code'; // Ensure you have this: npm install react-qr-code
 
 // --- CONFIGURATION ---
