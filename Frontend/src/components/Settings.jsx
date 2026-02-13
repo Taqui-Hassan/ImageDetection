@@ -16,7 +16,7 @@ export default function Settings() {
     const handleUnlock = (e) => {
         e.preventDefault();
         // 🔐 CHANGE THIS PASSWORD if you want
-        if (password === "admin123") {
+        if (password === import.meta.env.VITE_SETTINGS_PASSWORD) {
             setIsUnlocked(true);
             fetchConfig();
         } else {

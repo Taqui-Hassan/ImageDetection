@@ -10,7 +10,17 @@ export default function GuestList() {
     const [guests, setGuests] = useState([]);
     const [search, setSearch] = useState("");
     const [loading, setLoading] = useState(false);
-
+     const [isUnlocked, setIsUnlocked] = useState(false);
+    const handleUnlock = (e) => {
+        e.preventDefault();
+        // 🔐 CHANGE THIS PASSWORD if you want
+        if (password === import.meta.env.VITE_GUEST_LIST_PASSWORD) {
+            setIsUnlocked(true);
+            fetchConfig();
+        } else {
+            alert("Incorrect Password");
+        }
+    };
     const fetchGuests = async () => {
         setLoading(true);
         try {
@@ -69,7 +79,30 @@ export default function GuestList() {
     );
 
     const enteredCount = guests.filter(g => g.entered).length;
-
+    if (!isUnlocked) {
+            return (
+                <div className="flex flex-col items-center justify-center h-[50vh] animate-fade-in">
+                    <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 text-center max-w-sm w-full">
+                        <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <LockIcon className="text-slate-400" />
+                        </div>
+                        <h2 className="text-xl font-bold text-white mb-4">Protected Settings</h2>
+                        <form onSubmit={handleUnlock}>
+                            <input 
+                                type="password" 
+                                placeholder="Enter Admin Password" 
+                                className="w-full bg-slate-900 border border-slate-600 text-white p-3 rounded-lg mb-4 text-center focus:outline-none focus:border-blue-500"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                            />
+                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-all">
+                                Unlock
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
     return (
         <div className="animate-fade-in max-w-4xl mx-auto">
             {/* STATS */}
