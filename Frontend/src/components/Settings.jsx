@@ -4,7 +4,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import EditIcon from '@mui/icons-material/Edit';
 
 const API_URL = import.meta.env.VITE_API_URL;
-
+const MESSAGE_URL = import.meta.env.VITE_SETTINGS_PASSWORD;
 export default function Settings() {
     const [password, setPassword] = useState("");
     const [isUnlocked, setIsUnlocked] = useState(false);
@@ -16,7 +16,7 @@ export default function Settings() {
     const handleUnlock = (e) => {
         e.preventDefault();
         // 🔐 CHANGE THIS PASSWORD if you want
-        if (password === import.meta.env.VITE_SETTINGS_PASSWORD) {
+        if (password === MESSAGE_URL) {
             setIsUnlocked(true);
             fetchConfig();
         } else {
