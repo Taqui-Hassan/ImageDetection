@@ -5,7 +5,7 @@ import EditIcon from '@mui/icons-material/Edit';
 const SETTINGS_PASSWORD = import.meta.env.VITE_SETTINGS_PASSWORD;
 console.log("THE PASSWORD IS:", SETTINGS_PASSWORD); // 👈 ADD THIS LINE
 const API_URL = import.meta.env.VITE_API_URL;
-const MESSAGE_URL = import.meta.env.VITE_SETTINGS_PASSWORD;
+const MESSAGE_URL = import.meta.env.VITE_S_P;
 export default function Settings() {
     const [password, setPassword] = useState("");
     const [isUnlocked, setIsUnlocked] = useState(false);
