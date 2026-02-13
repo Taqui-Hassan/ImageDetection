@@ -6,323 +6,295 @@ import xlsx from "xlsx";
 import fs from "fs";
 import path from "path";
 import fetch from "node-fetch"; 
-import axios from "axios"; // Added axios for better binary file handling
+import axios from "axios"; 
 import { fileURLToPath } from "url";
 import FormData from 'form-data';
 import qrcodeTerminal from 'qrcode-terminal';
 import pkg from 'whatsapp-web.js';
+import sharp from 'sharp'; 
 
 // Load environment variables
 dotenv.config();
-// --- HELPER: CONVERT GOOGLE DRIVE LINKS ---
-function getDirectDriveLink(url) {
-    if (!url) return null;
-    
-    // Check if it is a Google Drive link
-    if (url.includes("drive.google.com") && url.includes("id=")) {
-        // Extract the ID
-        const idMatch = url.match(/id=([a-zA-Z0-9_-]+)/);
-        if (idMatch && idMatch[1]) {
-            // Return the "Direct Download" format
-            return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
-        }
-    }
-    // If it's already a direct link (like bucket/image.jpg), return as is
-    return url;
-}
+
+// --- ⚡ FIX: DEFINE DIRECTORIES FIRST ⚡ ---
 const { Client, LocalAuth, MessageMedia } = pkg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Support HD Photos
-
 // --- CONFIGURATION ---
 const CONFIG = {
     PORT: process.env.PORT || 8000,
-    PYTHON_AI_URL: process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5000', // Face Rec
-    PYTHON_BG_URL: 'http://127.0.0.1:5001', // 🎨 NEW: BG Remover runs on 5001
-    GUEST_LIST_PASSWORD: process.env.GUEST_LIST_PASSWORD || "list2024"
+    PYTHON_AI_URL: process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:5000', 
+    PHOTOROOM_API_KEY: process.env.PHOTOROOM_API_KEY, 
+    BACKGROUND_IMAGE: path.join(__dirname, "background.png") 
 };
 
-// --- DIRECTORIES ---
+// --- DIRECTORIES SETUP ---
 const UPLOADS_DIR = path.join(__dirname, "uploads");
-const FACE_DB = path.join(__dirname, "faces");
+const FACE_DB = path.join(__dirname, "face_service", "faces"); 
 const AUTH_DIR = path.join(__dirname, ".wwebjs_auth");
 const META_FILE = path.join(FACE_DB, "meta.json");
+const CONFIG_FILE = path.join(__dirname, "config.json"); 
 
-[UPLOADS_DIR, FACE_DB].forEach(dir => {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
+// Ensure directories exist
+[UPLOADS_DIR, FACE_DB].forEach(dir => { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); });
 if (!fs.existsSync(META_FILE)) fs.writeFileSync(META_FILE, "{}");
 
-// --- LIVE STATS TRACKER ---
-let stats = {
-    totalScans: 0,
-    success: 0,
-    failed: 0,
-    lastScanned: "None",
-    recentFailures: [] 
+// --- 🆕 LOAD/SAVE MESSAGE CONFIG ---
+let appConfig = {
+    captionTemplate: "Dear {name} San\n\n✅ *Access Granted*\n📍 *Seat:* {seat}\n\nEnjoy the day!" 
 };
 
-// --- WHATSAPP CLIENT ---
+if (fs.existsSync(CONFIG_FILE)) {
+    try { appConfig = JSON.parse(fs.readFileSync(CONFIG_FILE)); } catch(e) {}
+} else {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2));
+}
+
+// --- STATE ---
+let stats = { totalScans: 0, success: 0, failed: 0, lastScanned: "None" };
 let isWhatsAppReady = false;
 let currentQR = null; 
 
+// --- WHATSAPP SETUP ---
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
-    puppeteer: {
-        headless: true, 
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote', '--disable-gpu']
-    }
+    puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
-client.on('qr', qr => { console.log('🔥 QR RECEIVED'); currentQR = qr; qrcodeTerminal.generate(qr, { small: true }); });
-client.on('ready', () => { isWhatsAppReady = true; currentQR = null; console.log(`✅ WHATSAPP CONNECTED! (${client.info.wid.user})`); });
-client.on('disconnected', () => { isWhatsAppReady = false; console.log('⚠️ WhatsApp disconnected'); });
+client.on('qr', qr => { 
+    console.log('🔥 QR RECEIVED'); 
+    currentQR = qr; 
+    qrcodeTerminal.generate(qr, { small: true }); 
+});
+
+client.on('ready', () => { 
+    isWhatsAppReady = true; 
+    currentQR = null; 
+    console.log(`✅ WHATSAPP CONNECTED! (${client.info.wid.user})`); 
+});
+
+client.on('disconnected', () => { 
+    isWhatsAppReady = false; 
+    currentQR = null; 
+    console.log('⚠️ WhatsApp disconnected');
+});
+
 client.initialize();
+
+// --- EXPRESS APP ---
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '50mb' })); 
+const upload = multer({ dest: UPLOADS_DIR });
 
 // --- HELPERS ---
 function formatPhoneNumber(phone) {
+    if (!phone) return "";
     let cleaned = phone.toString().replace(/\D/g, '');
     if (cleaned.length === 10) cleaned = '91' + cleaned;
     return cleaned;
 }
+function getDirectDriveLink(url) {
+    if (!url) return null;
+    let fileId = null;
+    const matchId = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const matchD = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (matchId) fileId = matchId[1];
+    else if (matchD) fileId = matchD[1];
+    if (fileId) return `https://drive.google.com/thumbnail?id=${fileId}&sz=w4000`;
+    return url;
+}
 
 // --- ROUTES ---
 
-// 1. LIVE MONITOR DASHBOARD 📊
-app.get("/monitor", (req, res) => {
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Event Monitor</title>
-        <meta http-equiv="refresh" content="3">
-        <style>
-            body { font-family: sans-serif; background: #1a1a1a; color: white; padding: 20px; text-align: center; }
-            .grid { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; }
-            .card { background: #333; padding: 20px; border-radius: 10px; width: 200px; }
-            .number { font-size: 40px; font-weight: bold; }
-            .green { color: #4caf50; } .red { color: #f44336; } .blue { color: #2196f3; }
-            table { width: 100%; margin-top: 20px; border-collapse: collapse; }
-            th, td { border: 1px solid #444; padding: 10px; text-align: left; }
-            th { background: #444; }
-        </style>
-    </head>
-    <body>
-        <h1>🚀 Event Live Monitor</h1>
-        <div class="grid">
-            <div class="card">
-                <div>Total Scans</div>
-                <div class="number blue">${stats.totalScans}</div>
-            </div>
-            <div class="card">
-                <div>Matched</div>
-                <div class="number green">${stats.success}</div>
-            </div>
-            <div class="card">
-                <div>Failed</div>
-                <div class="number red">${stats.failed}</div>
-            </div>
-        </div>
-        <h2>Last Scanned: <span style="color: yellow">${stats.lastScanned}</span></h2>
-        
-        <h3>❌ Recent Failures</h3>
-        <table>
-            <tr><th>Time</th><th>Name Detected</th></tr>
-            ${stats.recentFailures.map(f => `<tr><td>${f.time}</td><td>${f.name}</td></tr>`).join('')}
-        </table>
-    </body>
-    </html>
-    `;
-    res.send(html);
+app.get("/config", (req, res) => res.json(appConfig));
+app.post("/config", (req, res) => {
+    if (req.body.captionTemplate) {
+        appConfig.captionTemplate = req.body.captionTemplate;
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2));
+        console.log("📝 Caption Updated!");
+    }
+    res.json({ status: "success", config: appConfig });
 });
 
-// 2. SYSTEM STATUS
+app.get("/monitor", (req, res) => res.send(`<h1>System Online</h1>`));
+
 app.get("/system-status", async (req, res) => {
     let batteryInfo = null;
     try { if (isWhatsAppReady) batteryInfo = await client.info.getBatteryStatus(); } catch (e) {}
-    res.json({ whatsapp: isWhatsAppReady, qr: currentQR, user: isWhatsAppReady ? client.info.wid.user : null, battery: batteryInfo });
+    
+    res.json({ 
+        whatsapp: isWhatsAppReady, 
+        qr: currentQR, 
+        user: isWhatsAppReady ? client.info.wid.user : null,
+        battery: batteryInfo
+    });
 });
 
-// 3. GET GUESTS
 app.get("/guests", (req, res) => {
     try {
         if (fs.existsSync(META_FILE)) {
             const meta = JSON.parse(fs.readFileSync(META_FILE));
-            const guests = Object.keys(meta).map(name => ({ 
-                name, 
-                phone: meta[name].phone, 
-                seat: meta[name].seat || "N/A",
-                entered: meta[name].entered || false 
-            }));
-            res.json(guests);
+            res.json(Object.keys(meta).map(name => ({ name, ...meta[name] })));
         } else { res.json([]); }
     } catch (err) { res.json([]); }
 });
 
-// 4. TOGGLE ENTRY STATUS
-app.put("/guests/:name/toggle", (req, res) => {
-    const nameToUpdate = req.params.name;
-    try {
-        let meta = JSON.parse(fs.readFileSync(META_FILE));
-        if (meta[nameToUpdate]) {
-            meta[nameToUpdate].entered = !meta[nameToUpdate].entered;
-            fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
-            res.json({ status: "success", entered: meta[nameToUpdate].entered });
-        } else { res.status(404).json({ error: "Guest not found" }); }
-    } catch (err) { res.status(500).json({ error: "Update failed" }); }
-});
-
-// 5. DELETE GUEST
-app.delete("/guests/:name", (req, res) => {
-    const nameToDelete = req.params.name;
-    try {
-        let meta = JSON.parse(fs.readFileSync(META_FILE));
-        if (meta[nameToDelete]) {
-            delete meta[nameToDelete];
-            fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
-            res.json({ status: "success" });
-        } else { res.status(404).json({ error: "Guest not found" }); }
-    } catch (err) { res.status(500).json({ error: "Could not delete" }); }
-});
-
-const upload = multer({ dest: UPLOADS_DIR });
-
-// 6. AI RECOGNIZE + BACKGROUND REMOVAL 🎨
-app.post("/recognize-guest", upload.single("image"), async (req, res) => {
+// ⚡ STEP 1: SCAN ONLY (FAST) ⚡
+app.post("/scan-face", upload.single("image"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No image" });
     
-    stats.totalScans++;
-
     const originalPath = req.file.path;
-    const filePath = originalPath + '.jpg';
-    fs.renameSync(originalPath, filePath);
+    const tempFileName = `temp_${Date.now()}.jpg`;
+    const tempFilePath = path.join(UPLOADS_DIR, tempFileName);
+    fs.renameSync(originalPath, tempFilePath);
 
     try {
-        console.log("📤 Sending image to AI for Face Rec..."); 
         const form = new FormData();
-        form.append('image', fs.createReadStream(filePath));
-
-        // 1. FACE RECOGNITION (Port 5000)
+        form.append('image', fs.createReadStream(tempFilePath));
+        
         const pyRes = await fetch(`${CONFIG.PYTHON_AI_URL}/recognize`, { method: 'POST', body: form });
         const data = await pyRes.json();
-        console.log("🤖 AI Response:", JSON.stringify(data)); 
 
         if ((data.status === 'matched' || data.match === true) && data.name) {
-            
             let meta = JSON.parse(fs.readFileSync(META_FILE));
             const aiNameClean = data.name.trim().toLowerCase();
-            stats.lastScanned = data.name;
-
-            // SMART SEARCH
-            const foundKey = Object.keys(meta).find(key => key.toLowerCase() === aiNameClean);
-            const guestData = foundKey ? meta[foundKey] : null;
-
-            if (!guestData) {
-                stats.failed++;
-                stats.recentFailures.unshift({ time: new Date().toLocaleTimeString(), name: data.name });
-                if (stats.recentFailures.length > 10) stats.recentFailures.pop();
-
-                return res.json({ 
+            const foundKey = Object.keys(meta).find(k => k.toLowerCase() === aiNameClean);
+            
+            if (foundKey) {
+                res.json({ 
                     status: "matched", 
-                    name: data.name, 
-                    seat: "Check List",
-                    entered: false 
+                    name: foundKey, 
+                    seat: meta[foundKey].seat,
+                    tempId: tempFileName 
                 });
+            } else {
+                res.json({ status: "unknown" });
+                try { fs.unlinkSync(tempFilePath); } catch(e){} 
             }
-
-            stats.success++;
-
-            // --- 🎨 BACKGROUND REMOVAL MAGIC START ---
-            let finalImagePath = filePath; // Default to original
-            try {
-                console.log("🎨 Sending to BG Remover (Port 5001)...");
-                const bgFormData = new FormData();
-                bgFormData.append('image', fs.createReadStream(filePath));
-
-                // Call BG Remover
-                const bgRes = await axios.post(`${CONFIG.PYTHON_BG_URL}/composite`, bgFormData, {
-                    headers: { ...bgFormData.getHeaders() },
-                    responseType: 'arraybuffer' // Important for binary images
-                });
-
-                // Save the new fancy image
-                const compositePath = filePath.replace('.jpg', '_composite.jpg');
-                fs.writeFileSync(compositePath, bgRes.data);
-                
-                finalImagePath = compositePath; // Switch to use the fancy image
-                console.log("✅ Composite Image Created!");
-
-            } catch (bgErr) {
-                console.error("⚠️ BG Removal Failed (Sending original instead):", bgErr.message);
-                // If 5001 is offline, we just proceed with the original photo. No crash.
-            }
-            // --- 🎨 BACKGROUND REMOVAL MAGIC END ---
-
-            // Mark as Entered
-            meta[foundKey].entered = true;
-            fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
-
-            const cleanPhone = formatPhoneNumber(guestData.phone);
-            const seatNumber = guestData.seat || "General";
-            const chatId = `${cleanPhone}@c.us`;
-            const caption = `Dear ${foundKey} \n\n✅ *Access Granted*\n📍 *Seat:* ${seatNumber}\n\nHere is your souvenir photo! 📸`;
-
-            // Send WhatsApp
-            if (isWhatsAppReady) {
-                try {
-                    const media = await MessageMedia.fromFilePath(finalImagePath);
-                    client.sendMessage(chatId, media, { caption }).catch(e => console.error("WA Msg Error:", e));
-                } catch (waErr) {
-                    console.error("WA Media Error:", waErr);
-                }
-            }
-
-            res.json({ 
-                status: "matched", 
-                name: foundKey, 
-                phone: cleanPhone, 
-                seat: seatNumber, 
-                entered: true 
-            });
-
         } else {
-            stats.failed++;
             res.json({ status: "unknown" });
+            try { fs.unlinkSync(tempFilePath); } catch(e){}
         }
     } catch (err) {
-        console.error("🔥 Server Error:", err.message);
         res.status(500).json({ error: err.message });
-    } finally {
-        // Cleanup: We don't delete immediately so WhatsApp has time to send, 
-        // but normally you'd run a cleanup job. For now, we leave it or delete after delay.
-        setTimeout(() => {
-            try { fs.unlinkSync(filePath); } catch (e) { }
-            try { fs.unlinkSync(filePath.replace('.jpg', '_composite.jpg')); } catch (e) { }
-        }, 10000); // Delete after 10 seconds
+        try { fs.unlinkSync(tempFilePath); } catch(e){}
     }
 });
 
-// 7. UPLOAD EXCEL
+// ⚡ STEP 2: CONFIRM & PROCESS (BACKGROUND) ⚡
+app.post("/confirm-visit", async (req, res) => {
+    const { name, tempId } = req.body;
+    
+    res.json({ status: "queued", message: "Processing in background" });
+    console.log(`\n🚀 Starting background process for: ${name}`);
+    
+    const filePath = path.join(UPLOADS_DIR, tempId);
+    if (!fs.existsSync(filePath)) {
+        console.error("❌ Temp file missing for background process");
+        return;
+    }
+
+    try {
+        let meta = JSON.parse(fs.readFileSync(META_FILE));
+        const guestData = meta[name];
+        
+        let finalImagePath = filePath; 
+        
+        if (CONFIG.PHOTOROOM_API_KEY) {
+            try {
+                console.log("✂️ Sending to Photoroom for Background Removal...");
+                const prForm = new FormData();
+                prForm.append('image_file', fs.createReadStream(filePath));
+
+                const prRes = await axios.post('https://sdk.photoroom.com/v1/segment', prForm, {
+                    headers: { 'x-api-key': CONFIG.PHOTOROOM_API_KEY, ...prForm.getHeaders() },
+                    responseType: 'arraybuffer'
+                });
+
+                if (fs.existsSync(CONFIG.BACKGROUND_IMAGE)) {
+                    console.log("🖼️ Compositing Image with Event Template...");
+                    const compositePath = filePath.replace('.jpg', '_final.jpg');
+                    const templateMetadata = await sharp(CONFIG.BACKGROUND_IMAGE).metadata();
+                    
+                    const resizedPerson = await sharp(prRes.data)
+                        .resize({ 
+                            width: Math.floor(templateMetadata.width * 0.85),
+                            height: Math.floor(templateMetadata.height * 0.70),
+                            fit: 'inside',
+                            background: { r: 0, g: 0, b: 0, alpha: 0 }
+                        })
+                        .toBuffer();
+
+                    await sharp(CONFIG.BACKGROUND_IMAGE)
+                        .composite([{ input: resizedPerson, gravity: 'south' }])
+                        .toFile(compositePath);
+
+                    finalImagePath = compositePath;
+                    console.log("✅ Custom Souvenir Photo Created!");
+                } else {
+                    const transPath = filePath.replace('.jpg', '_trans.png');
+                    fs.writeFileSync(transPath, prRes.data);
+                    finalImagePath = transPath;
+                }
+            } catch (e) { console.error("⚠️ Background Removal Failed:", e.message); }
+        }
+
+        if (guestData) {
+            meta[name].entered = true;
+            fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+
+            if (isWhatsAppReady) {
+                console.log(`📨 Preparing WhatsApp Message for ${name}...`);
+                let caption = appConfig.captionTemplate
+                    .replace(/{name}/g, name)
+                    .replace(/{seat}/g, guestData.seat);
+
+                const cleanPhone = formatPhoneNumber(guestData.phone);
+                const chatId = `${cleanPhone}@c.us`;
+                
+                try {
+                    const media = await MessageMedia.fromFilePath(finalImagePath);
+                    await client.sendMessage(chatId, media, { caption });
+                    console.log(`✅ WhatsApp Sent to ${name} Successfully!`);
+                } catch (e) { console.error("❌ WhatsApp Failed:", e.message); }
+            } else {
+                console.log("⚠️ WhatsApp is NOT connected. Skipping message.");
+            }
+        }
+        
+    } catch (err) {
+        console.error("❌ Background Process Error:", err);
+    } finally {
+        setTimeout(() => {
+            try {
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                const finalPath = filePath.replace('.jpg', '_final.jpg');
+                if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+            } catch(e){}
+        }, 15000);
+    }
+});
+
+// 5. SIMPLE EXCEL UPLOAD
 app.post("/upload-excel", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error" });
     const tempFilePath = req.file.path;
     try {
         const workbook = xlsx.readFile(tempFilePath);
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = xlsx.utils.sheet_to_json(sheet);
+        const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
         
         let meta = JSON.parse(fs.readFileSync(META_FILE));
         let enrolled = 0;
 
+        console.log(`\n📄 Importing Guest List... Found ${rows.length} rows.`);
+
         for (const row of rows) {
             const name = row.Name?.toString().trim();
-            const phone = row.Phone?.toString().trim();
+            const phone = (row.Phone || "0000000000").toString().trim(); 
             const seat = row.Seat || row["Seat Number"] || "General";
-            const imageURL = row.ImageURL || row.imageurl || ""; 
+            const imageURL = getDirectDriveLink(row.ImageURL || row.imageurl || ""); 
 
             if (name && phone) {
                 const existingEntry = meta[name];
@@ -336,6 +308,7 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
             }
         }
         fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+        console.log(`✅ Successfully imported/updated ${enrolled} guests in the database.`);
         res.json({ status: "success", enrolled });
     } catch (err) {
         res.status(500).json({ status: "error", message: err.message });
@@ -344,84 +317,187 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
     }
 });
 
-// 8. BULK SENDER (WITH IMAGE URL SUPPORT) ✅
-const bulkUpload = upload.single("file");
-
-app.post("/send-bulk", bulkUpload, async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ status: "error", message: "No Excel file uploaded" });
-    }
-
+// 6. BULK SENDER
+app.post("/send-bulk", upload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ status: "error" });
     const excelPath = req.file.path;
     const messageTemplate = req.body.message || "Hello {name}, welcome! Your seat is {seat}.";
 
     try {
         const workbook = xlsx.readFile(excelPath);
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = xlsx.utils.sheet_to_json(sheet);
-        
-        let successCount = 0;
-        let failCount = 0;
+        const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        let successCount = 0; let failCount = 0;
 
-        console.log(`📨 Starting Bulk Blast to ${rows.length} people...`);
+        console.log(`\n📢 Starting Bulk Broadcast to ${rows.length} numbers...`);
 
         for (const row of rows) {
             const name = row.Name || row.name;
-            const phone = row.Phone || row.phone;
+            const phone = (row.Phone || row.phone || "").toString().trim();
             const seat = row.Seat || row.seat || "General";
-            const imageUrl = row.ImageURL || row.imageurl || row["Image Link"]; 
+            const imageUrl = getDirectDriveLink(row.ImageURL || row.imageurl || row["Image Link"]);
 
-            if (name && phone) {
-                const cleanPhone = formatPhoneNumber(phone);
-                const chatId = `${cleanPhone}@c.us`;
+            if (name && phone.length > 5) {
+                const chatId = `${formatPhoneNumber(phone)}@c.us`;
+                const finalMessage = messageTemplate.replace("{name}", name).replace("{seat}", seat);
                 
-                let finalMessage = messageTemplate
-                    .replace("{name}", name)
-                    .replace("{seat}", seat);
-
                 if (isWhatsAppReady) {
                     try {
                         let media = null;
-                        
-                        if (imageUrl) {
-                            try {
-                                console.log(`⬇️ Downloading image for ${name}...`);
-                                media = await MessageMedia.fromUrl(imageUrl, { unsafeMime: true });
-                            } catch (downloadErr) {
-                                console.error(`⚠️ Failed to download image for ${name}: ${downloadErr.message}`);
-                            }
-                        }
-
-                        if (media) {
-                            await client.sendMessage(chatId, media, { caption: finalMessage });
-                        } else {
-                            await client.sendMessage(chatId, finalMessage);
-                        }
-                        
+                        if (imageUrl) media = await MessageMedia.fromUrl(imageUrl, { unsafeMime: true });
+                        media ? await client.sendMessage(chatId, media, { caption: finalMessage }) 
+                              : await client.sendMessage(chatId, finalMessage);
                         successCount++;
-                        console.log(`✅ Sent to ${name}`);
-                        
-                        await new Promise(r => setTimeout(r, 3000)); 
-
-                    } catch (e) {
-                        console.error(`❌ Failed to send to ${name}:`, e.message);
-                        failCount++;
+                        console.log(`✅ Bulk msg sent to ${name}`);
+                        await new Promise(r => setTimeout(r, 4000)); 
+                    } catch (e) { 
+                        failCount++; 
+                        console.log(`❌ Failed bulk msg for ${name}`);
                     }
-                } else {
-                    failCount++;
                 }
             }
         }
+        console.log(`🏁 Bulk broadcast complete. Sent: ${successCount}, Failed: ${failCount}`);
         res.json({ status: "success", sent: successCount, failed: failCount });
-
     } catch (err) {
-        console.error("🔥 Bulk Error:", err);
         res.status(500).json({ error: err.message });
     } finally {
         try { fs.unlinkSync(excelPath); } catch (e) {}
     }
 });
 
+// 7. ADMIN TOOL: AUTO-ENROLLMENT (RESTORED DETAILED LOGS)
+app.post("/admin/enroll-guests", upload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ status: "error", message: "No file" });
+    const tempFilePath = req.file.path;
+    res.json({ status: "started", message: "Processing started." });
+
+    try {
+        const workbook = xlsx.readFile(tempFilePath);
+        const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        let meta = JSON.parse(fs.readFileSync(META_FILE));
+        
+        console.log(`\n=================================================`);
+        console.log(`🚀 ADMIN ENROLLMENT STARTING for ${rows.length} guests...`);
+        console.log(`=================================================`);
+        
+        let downloaded = 0;
+        let skipped = 0;
+
+        (async () => {
+            for (const row of rows) {
+                const name = row.Name?.toString().trim();
+                const phoneRaw = row.Phone || "0000000000"; 
+                const phone = phoneRaw.toString().trim();
+                const seat = row.Seat || "General";
+                const imageUrl = getDirectDriveLink(row.ImageURL || "");
+
+                if (name && imageUrl) {
+                    const userFolder = path.join(FACE_DB, name);
+                    if (!fs.existsSync(userFolder)) fs.mkdirSync(userFolder, { recursive: true });
+                    const imagePath = path.join(userFolder, "1.jpg");
+
+                    if (!fs.existsSync(imagePath)) {
+                        try {
+                            console.log(`📥 Downloading photo for: ${name}...`);
+                            const response = await axios({ url: imageUrl, method: 'GET', responseType: 'stream' });
+                            const writer = fs.createWriteStream(imagePath);
+                            response.data.pipe(writer);
+                            await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
+                            
+                            console.log(`✅ Saved photo for: ${name}`);
+                            downloaded++;
+                        } catch (e) { 
+                            console.log(`❌ Failed to download photo for ${name}: ${e.message}`); 
+                        }
+                    } else {
+                        console.log(`⏭️ Skipped ${name} (Photo already exists)`);
+                        skipped++;
+                    }
+                    
+                    // Update Meta info
+                    meta[name] = { phone: formatPhoneNumber(phone), seat: seat, imageURL: imageUrl, entered: false };
+                }
+            }
+            
+            // Save the meta file after the loop finishes
+            fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+            console.log(`\n🏁 Enrollment Complete!`);
+            console.log(`📊 Total Downloaded: ${downloaded} | Total Skipped: ${skipped}`);
+            console.log(`=================================================\n`);
+            
+        })();
+    } catch (err) { 
+        console.error("❌ Enrollment System Error:", err); 
+    } finally { 
+        try { fs.unlinkSync(tempFilePath); } catch(e){} 
+    }
+});
+
+// Toggle
+app.put("/guests/:name/toggle", (req, res) => {
+    try {
+        let meta = JSON.parse(fs.readFileSync(META_FILE));
+        const key = Object.keys(meta).find(k => k.toLowerCase() === req.params.name.toLowerCase());
+        if (key) {
+            meta[key].entered = !meta[key].entered;
+            fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+            res.json({ status: "success" });
+        } else res.status(404).json({ error: "Not found" });
+    } catch (err) { res.status(500).json({ error: "Fail" }); }
+});
+
+// Delete
+app.delete("/guests/:name", (req, res) => {
+    try {
+        let meta = JSON.parse(fs.readFileSync(META_FILE));
+        const key = Object.keys(meta).find(k => k.toLowerCase() === req.params.name.toLowerCase());
+        if (key) {
+            delete meta[key];
+            fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+            const folder = path.join(FACE_DB, key);
+            if (fs.existsSync(folder)) fs.rmSync(folder, { recursive: true, force: true });
+            res.json({ status: "success" });
+        } else res.status(404).json({ error: "Not found" });
+    } catch (err) { res.status(500).json({ error: "Fail" }); }
+});
+
+// ⚡ STEP 1.5: MANUAL PHONE ENTRY (FAIL-SAFE) ⚡
+app.post("/manual-entry", upload.single("image"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "Camera failed" });
+    
+    const inputPhone = req.body.phone?.replace(/\D/g, '').slice(-10);
+    if (!inputPhone) return res.status(400).json({ error: "No phone provided" });
+
+    const originalPath = req.file.path;
+    const tempFileName = `temp_manual_${Date.now()}.jpg`;
+    const tempFilePath = path.join(UPLOADS_DIR, tempFileName);
+    fs.renameSync(originalPath, tempFilePath);
+
+    try {
+        let meta = JSON.parse(fs.readFileSync(META_FILE));
+        
+        const foundKey = Object.keys(meta).find(key => {
+            const storedPhone = meta[key].phone ? meta[key].phone.toString().replace(/\D/g, '') : "";
+            return storedPhone.endsWith(inputPhone);
+        });
+
+        if (foundKey) {
+            res.json({ 
+                status: "matched", 
+                name: foundKey, 
+                seat: meta[foundKey].seat,
+                tempId: tempFileName 
+            });
+        } else {
+            res.json({ status: "unknown" });
+            try { fs.unlinkSync(tempFilePath); } catch(e){} 
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+        try { fs.unlinkSync(tempFilePath); } catch(e){} 
+    }
+});
+
 app.listen(CONFIG.PORT, () => {
-    console.log(`🚀 LOCAL BACKEND RUNNING ON http://localhost:${CONFIG.PORT}`);
+    console.log(`🚀 BACKEND RUNNING ON http://localhost:${CONFIG.PORT}`);
 });
