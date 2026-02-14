@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import QRCode from 'react-qr-code'; 
 import Webcam from 'react-webcam'; // Import Webcam here since we use it in the Scan tab logic
-import photo from './components/scanner_panel.jpg'
+
 // --- COMPONENTS ---
 import FaceCapture from './components/faceCapture';
 import GuestList from './components/guestList';
@@ -167,7 +167,7 @@ export default function App() {
                 onClick={() => setIsScanning(true)}
               >
                 <img 
-                  src={photo} 
+                  src='/scanner_panel.jpg'
                   alt="Touch to Scan" 
                   className="w-full max-w-[500px] rounded-2xl shadow-2xl border-2 border-cyan-500/50 group-hover:border-cyan-400 transition-all duration-300 group-hover:shadow-[0_0_30px_rgba(0,255,255,0.4)]"
                 />
