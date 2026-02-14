@@ -92,9 +92,22 @@ const upload = multer({ dest: UPLOADS_DIR });
 function formatPhoneNumber(phone) {
     if (!phone) return "";
     let cleaned = phone.toString().replace(/\D/g, '');
-    if (cleaned.length === 10) cleaned = '91' + cleaned;
-    return cleaned;
+    if (cleaned.length > 10) cleaned = cleaned.slice(-10); // Take last 10 digits
+    return '91' + cleaned;
 }
+
+// 🔍 NEW HELPER: FIND PERSON BY PHONE
+function findPersonKeyByPhone(meta, phoneInput) {
+    if (!phoneInput) return null;
+    const cleanInput = phoneInput.toString().replace(/\D/g, '').slice(-10);
+    
+    // Check every person in database to see if phone ends with the same last 10 digits
+    return Object.keys(meta).find(key => {
+        const storedPhone = meta[key].phone ? meta[key].phone.toString().replace(/\D/g, '') : "";
+        return storedPhone.endsWith(cleanInput);
+    });
+}
+
 function getDirectDriveLink(url) {
     if (!url) return null;
     let fileId = null;
@@ -277,7 +290,7 @@ app.post("/confirm-visit", async (req, res) => {
     }
 });
 
-// 5. SIMPLE EXCEL UPLOAD
+// 5. SIMPLE EXCEL UPLOAD (SEAT UPDATER - PHONE BASED MATCHING) ⚡ MODIFIED
 app.post("/upload-excel", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error" });
     const tempFilePath = req.file.path;
@@ -287,29 +300,43 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
         
         let meta = JSON.parse(fs.readFileSync(META_FILE));
         let enrolled = 0;
+        let updated = 0;
 
-        console.log(`\n📄 Importing Guest List... Found ${rows.length} rows.`);
+        console.log(`\n📄 Importing Guest/Seat List... Found ${rows.length} rows.`);
 
         for (const row of rows) {
             const name = row.Name?.toString().trim();
-            const phone = (row.Phone || "0000000000").toString().trim(); 
-            const seat = row.Seat || row["Seat Number"] || "General";
+            const phoneRaw = (row.Phone || "0000000000").toString().trim(); 
+            const seat = row.Seat || row["Seat Number"] || "Please Contact Support Team";
             const imageURL = getDirectDriveLink(row.ImageURL || row.imageurl || ""); 
 
-            if (name && phone) {
-                const existingEntry = meta[name];
-                meta[name] = { 
-                    phone: formatPhoneNumber(phone), 
-                    seat: seat.toString(),
-                    imageURL: imageURL, 
-                    entered: existingEntry ? existingEntry.entered : false 
-                };
-                enrolled++;
+            if (name && phoneRaw.length > 5) {
+                // 🔍 CHECK: Does this phone number already exist?
+                const existingKey = findPersonKeyByPhone(meta, phoneRaw);
+
+                if (existingKey) {
+                    // ✅ MATCH FOUND: Update existing person (Merge Seat Info)
+                    console.log(`🔄 Merging: "${name}" -> Found existing "${existingKey}". Updating Seat to ${seat}.`);
+                    meta[existingKey].seat = seat.toString();
+                    meta[existingKey].phone = formatPhoneNumber(phoneRaw); // Ensure phone format is consistent
+                    if(imageURL) meta[existingKey].imageURL = imageURL; // Update image URL if provided
+                    updated++;
+                } else {
+                    // 🆕 NEW ENTRY
+                    console.log(`🆕 Creating: "${name}" with Seat ${seat}.`);
+                    meta[name] = { 
+                        phone: formatPhoneNumber(phoneRaw), 
+                        seat: seat.toString(),
+                        imageURL: imageURL, 
+                        entered: false 
+                    };
+                    enrolled++;
+                }
             }
         }
         fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
-        console.log(`✅ Successfully imported/updated ${enrolled} guests in the database.`);
-        res.json({ status: "success", enrolled });
+        console.log(`✅ Import Complete. New: ${enrolled} | Updated: ${updated}`);
+        res.json({ status: "success", enrolled, updated });
     } catch (err) {
         res.status(500).json({ status: "error", message: err.message });
     } finally {
@@ -317,7 +344,7 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
     }
 });
 
-// 6. BULK SENDER
+// 6. BULK SENDER (UNCHANGED)
 app.post("/send-bulk", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error" });
     const excelPath = req.file.path;
@@ -333,7 +360,7 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
         for (const row of rows) {
             const name = row.Name || row.name;
             const phone = (row.Phone || row.phone || "").toString().trim();
-            const seat = row.Seat || row.seat || "General";
+            const seat = row.Seat || row.seat || "Please Contact Support Team";
             const imageUrl = getDirectDriveLink(row.ImageURL || row.imageurl || row["Image Link"]);
 
             if (name && phone.length > 5) {
@@ -365,7 +392,7 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
     }
 });
 
-// 7. ADMIN TOOL: AUTO-ENROLLMENT (RESTORED DETAILED LOGS)
+// 7. ADMIN TOOL: AUTO-ENROLLMENT (PHONE BASED PHOTO DOWNLOADER) ⚡ MODIFIED
 app.post("/admin/enroll-guests", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error", message: "No file" });
     const tempFilePath = req.file.path;
@@ -377,7 +404,7 @@ app.post("/admin/enroll-guests", upload.single("file"), async (req, res) => {
         let meta = JSON.parse(fs.readFileSync(META_FILE));
         
         console.log(`\n=================================================`);
-        console.log(`🚀 ADMIN ENROLLMENT STARTING for ${rows.length} guests...`);
+        console.log(`🚀 ADMIN ENROLLMENT (Phone-Based) STARTING...`);
         console.log(`=================================================`);
         
         let downloaded = 0;
@@ -386,36 +413,48 @@ app.post("/admin/enroll-guests", upload.single("file"), async (req, res) => {
         (async () => {
             for (const row of rows) {
                 const name = row.Name?.toString().trim();
-                const phoneRaw = row.Phone || "0000000000"; 
-                const phone = phoneRaw.toString().trim();
-                const seat = row.Seat || "General";
+                const phoneRaw = (row.Phone || "0000000000").toString().trim(); 
                 const imageUrl = getDirectDriveLink(row.ImageURL || "");
 
-                if (name && imageUrl) {
-                    const userFolder = path.join(FACE_DB, name);
+                if (name && imageUrl && phoneRaw.length > 5) {
+                    // 🔍 CHECK: Does this phone number already exist?
+                    let finalName = name; // Default to new name
+                    const existingKey = findPersonKeyByPhone(meta, phoneRaw);
+
+                    if (existingKey) {
+                        console.log(`🔄 Found existing user by phone: "${existingKey}". Using this folder to store photo.`);
+                        finalName = existingKey; // Use the OLD name to keep folder consistent
+                    } else {
+                        console.log(`🆕 New user detected: "${name}"`);
+                    }
+
+                    const userFolder = path.join(FACE_DB, finalName);
                     if (!fs.existsSync(userFolder)) fs.mkdirSync(userFolder, { recursive: true });
                     const imagePath = path.join(userFolder, "1.jpg");
 
                     if (!fs.existsSync(imagePath)) {
                         try {
-                            console.log(`📥 Downloading photo for: ${name}...`);
+                            console.log(`📥 Downloading photo for: ${finalName}...`);
                             const response = await axios({ url: imageUrl, method: 'GET', responseType: 'stream' });
                             const writer = fs.createWriteStream(imagePath);
                             response.data.pipe(writer);
                             await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
                             
-                            console.log(`✅ Saved photo for: ${name}`);
+                            console.log(`✅ Saved photo for: ${finalName}`);
                             downloaded++;
                         } catch (e) { 
-                            console.log(`❌ Failed to download photo for ${name}: ${e.message}`); 
+                            console.log(`❌ Failed to download photo for ${finalName}: ${e.message}`); 
                         }
                     } else {
-                        console.log(`⏭️ Skipped ${name} (Photo already exists)`);
+                        console.log(`⏭️ Skipped ${finalName} (Photo already exists)`);
                         skipped++;
                     }
                     
-                    // Update Meta info
-                    meta[name] = { phone: formatPhoneNumber(phone), seat: seat, imageURL: imageUrl, entered: false };
+                    // Update Meta info (Merge)
+                    if (!meta[finalName]) meta[finalName] = { entered: false, seat: "Please Contact Support Team" };
+                    meta[finalName].phone = formatPhoneNumber(phoneRaw);
+                    meta[finalName].imageURL = imageUrl;
+                    if(row.Seat) meta[finalName].seat = row.Seat;
                 }
             }
             
@@ -476,10 +515,8 @@ app.post("/manual-entry", upload.single("image"), async (req, res) => {
     try {
         let meta = JSON.parse(fs.readFileSync(META_FILE));
         
-        const foundKey = Object.keys(meta).find(key => {
-            const storedPhone = meta[key].phone ? meta[key].phone.toString().replace(/\D/g, '') : "";
-            return storedPhone.endsWith(inputPhone);
-        });
+        // Find by phone
+        const foundKey = findPersonKeyByPhone(meta, inputPhone);
 
         if (foundKey) {
             res.json({ 
