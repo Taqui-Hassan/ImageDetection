@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import SaveIcon from '@mui/icons-material/Save';
 import LockIcon from '@mui/icons-material/Lock';
 import EditIcon from '@mui/icons-material/Edit';
-const SETTINGS_PASSWORD = import.meta.env.VITE_SETTINGS_PASSWORD;
-console.log("THE PASSWORD IS:", SETTINGS_PASSWORD); // 👈 ADD THIS LINE
 const API_URL = import.meta.env.VITE_API_URL;
-const MESSAGE_URL = import.meta.env.VITE_S_P;
+const SETTINGS_PASSWORD = import.meta.env.VITE_SETTINGS_PASSWORD;
+
 export default function Settings() {
     const [password, setPassword] = useState("");
     const [isUnlocked, setIsUnlocked] = useState(false);
@@ -17,7 +16,7 @@ export default function Settings() {
     const handleUnlock = (e) => {
         e.preventDefault();
         // 🔐 CHANGE THIS PASSWORD if you want
-        if (password === MESSAGE_URL) {
+        if (password === SETTINGS_PASSWORD) {
             setIsUnlocked(true);
             fetchConfig();
         } else {
