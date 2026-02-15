@@ -101,6 +101,9 @@ function findPersonKeyByPhone(meta, phoneInput) {
     if (!phoneInput) return null;
     const cleanInput = phoneInput.toString().replace(/\D/g, '').slice(-10);
     
+    // 🛑 SAFETY: Ignore empty or default zero phones to prevent "Black Hole" merging
+    if (!cleanInput || cleanInput === '0000000000') return null;
+
     // Check every person in database to see if phone ends with the same last 10 digits
     return Object.keys(meta).find(key => {
         const storedPhone = meta[key].phone ? meta[key].phone.toString().replace(/\D/g, '') : "";
@@ -290,14 +293,13 @@ app.post("/confirm-visit", async (req, res) => {
     }
 });
 
-// 5. SIMPLE EXCEL UPLOAD (SEAT UPDATER - PHONE BASED MATCHING) ⚡ MODIFIED
+// ⚡ 5. SIMPLE EXCEL UPLOAD (SEAT UPDATER) - FIXED NAME COLLISION ⚡
 app.post("/upload-excel", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ status: "error" });
     const tempFilePath = req.file.path;
     try {
         const workbook = xlsx.readFile(tempFilePath);
         const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-        
         let meta = JSON.parse(fs.readFileSync(META_FILE));
         let enrolled = 0;
         let updated = 0;
@@ -305,24 +307,36 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
         console.log(`\n📄 Importing Guest/Seat List... Found ${rows.length} rows.`);
 
         for (const row of rows) {
-            const name = row.Name?.toString().trim();
-            const phoneRaw = (row.Phone || "0000000000").toString().trim(); 
-            const seat = row.Seat || row["Seat Number"] || "Please Contact Support Team";
+            let name = row.Name?.toString().trim();
+            // 🛡️ Try multiple column names for phone
+            const phoneRaw = (row.Phone || row.Mobile || row.Contact || "0000000000").toString().trim(); 
+            const seat = row.Seat || row["Seat Number"] || "Please Contact Manual Desk";
             const imageURL = getDirectDriveLink(row.ImageURL || row.imageurl || ""); 
 
-            if (name && phoneRaw.length > 5) {
-                // 🔍 CHECK: Does this phone number already exist?
+            if (name && phoneRaw.length > 5 && phoneRaw !== "0000000000") {
+                // 1. Check if phone exists (First priority)
                 const existingKey = findPersonKeyByPhone(meta, phoneRaw);
 
                 if (existingKey) {
-                    // ✅ MATCH FOUND: Update existing person (Merge Seat Info)
-                    console.log(`🔄 Merging: "${name}" -> Found existing "${existingKey}". Updating Seat to ${seat}.`);
+                    // ✅ UPDATE: Phone matched, update the existing person
+                    console.log(`🔄 Matched Phone: "${phoneRaw}" -> Updating "${existingKey}" (Seat: ${seat})`);
                     meta[existingKey].seat = seat.toString();
-                    meta[existingKey].phone = formatPhoneNumber(phoneRaw); // Ensure phone format is consistent
-                    if(imageURL) meta[existingKey].imageURL = imageURL; // Update image URL if provided
+                    meta[existingKey].phone = formatPhoneNumber(phoneRaw);
+                    if(imageURL) meta[existingKey].imageURL = imageURL;
                     updated++;
                 } else {
-                    // 🆕 NEW ENTRY
+                    // 🆕 NEW PHONE: But wait, does the NAME already exist?
+                    if (meta[name]) {
+                        // ⚠️ NAME COLLISION! 
+                        // "Sumit" exists, but phone is different.
+                        // Rename new guy to "Sumit (Last4Digits)"
+                        const suffix = phoneRaw.slice(-4);
+                        const newName = `${name} (${suffix})`;
+                        console.log(`⚠️ Name Collision: "${name}" exists. Renaming new entry to "${newName}"`);
+                        name = newName; 
+                    }
+
+                    // Create New Entry
                     console.log(`🆕 Creating: "${name}" with Seat ${seat}.`);
                     meta[name] = { 
                         phone: formatPhoneNumber(phoneRaw), 
@@ -332,6 +346,10 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
                     };
                     enrolled++;
                 }
+            } else {
+                 if (name && phoneRaw === "0000000000") {
+                     console.log(`⚠️ Skipping "${name}" - No valid Phone Number.`);
+                 }
             }
         }
         fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
@@ -339,9 +357,7 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
         res.json({ status: "success", enrolled, updated });
     } catch (err) {
         res.status(500).json({ status: "error", message: err.message });
-    } finally {
-        try { fs.unlinkSync(tempFilePath); } catch (e) { }
-    }
+    } finally { try { fs.unlinkSync(tempFilePath); } catch (e) { } }
 });
 
 // 6. BULK SENDER (UNCHANGED)
@@ -360,7 +376,7 @@ app.post("/send-bulk", upload.single("file"), async (req, res) => {
         for (const row of rows) {
             const name = row.Name || row.name;
             const phone = (row.Phone || row.phone || "").toString().trim();
-            const seat = row.Seat || row.seat || "Please Contact Support Team";
+            const seat = row.Seat || row.seat || "Please Contact Manual Desk";
             const imageUrl = getDirectDriveLink(row.ImageURL || row.imageurl || row["Image Link"]);
 
             if (name && phone.length > 5) {
@@ -412,20 +428,27 @@ app.post("/admin/enroll-guests", upload.single("file"), async (req, res) => {
 
         (async () => {
             for (const row of rows) {
-                const name = row.Name?.toString().trim();
+                let name = row.Name?.toString().trim();
                 const phoneRaw = (row.Phone || "0000000000").toString().trim(); 
                 const imageUrl = getDirectDriveLink(row.ImageURL || "");
 
-                if (name && imageUrl && phoneRaw.length > 5) {
-                    // 🔍 CHECK: Does this phone number already exist?
-                    let finalName = name; // Default to new name
+                // 🛡️ Strict Check: Ignore if no phone number
+                if (name && imageUrl && phoneRaw.length > 5 && phoneRaw !== "0000000000") {
+                    let finalName = name;
                     const existingKey = findPersonKeyByPhone(meta, phoneRaw);
 
                     if (existingKey) {
                         console.log(`🔄 Found existing user by phone: "${existingKey}". Using this folder to store photo.`);
                         finalName = existingKey; // Use the OLD name to keep folder consistent
                     } else {
-                        console.log(`🆕 New user detected: "${name}"`);
+                        // 🆕 NEW USER: Check for Name Collision
+                        if (meta[name]) {
+                             const suffix = phoneRaw.slice(-4);
+                             finalName = `${name} (${suffix})`;
+                             console.log(`⚠️ Name Collision: "${name}" exists. Creating "${finalName}"`);
+                        } else {
+                            console.log(`🆕 New user detected: "${name}"`);
+                        }
                     }
 
                     const userFolder = path.join(FACE_DB, finalName);
@@ -451,7 +474,7 @@ app.post("/admin/enroll-guests", upload.single("file"), async (req, res) => {
                     }
                     
                     // Update Meta info (Merge)
-                    if (!meta[finalName]) meta[finalName] = { entered: false, seat: "Please Contact Support Team" };
+                    if (!meta[finalName]) meta[finalName] = { entered: false, seat: "Please Contact Manual Desk" };
                     meta[finalName].phone = formatPhoneNumber(phoneRaw);
                     meta[finalName].imageURL = imageUrl;
                     if(row.Seat) meta[finalName].seat = row.Seat;

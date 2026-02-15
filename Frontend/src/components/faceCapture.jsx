@@ -157,7 +157,8 @@ export default function FaceCapture() {
                 <div className="absolute inset-0 z-30 flex flex-col items-center justify-center animate-fade-in bg-black/60 backdrop-blur-md p-4">
                     <div className="bg-slate-800 border border-slate-600 p-6 rounded-2xl w-full max-w-sm text-center shadow-2xl">
                         <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Confirm Identity</p>
-                        <h2 className="text-3xl font-bold text-white mb-2">Welcome <br/> Mr {detectedGuest.name}</h2>
+                        <h2 className="text-3xl font-bold text-white mb-2">Welcome</h2>
+                        <h2 className="text-3xl font-bold text-white mb-2">{detectedGuest.name} San</h2>
                         <div className="bg-blue-600/20 text-blue-300 px-4 py-2 rounded-lg font-mono text-xl font-bold inline-block mb-8 border border-blue-500/30">
                             Seat: {detectedGuest.seat}
                         </div>

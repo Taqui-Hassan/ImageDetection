@@ -4,7 +4,7 @@ from flask_cors import CORS
 from deepface import DeepFace
 import cv2
 import numpy as np
-
+from waitress import serve
 app = Flask(__name__)
 CORS(app)
 
@@ -94,5 +94,14 @@ def recognize_guest():
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
+
+
+
+
+
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    print("🚀 HIGH-PERFORMANCE AI SERVER STARTING...")
+    print("⚡ Serving on http://0.0.0.0:5000 with 8 Threads")
+    # This enables 8 parallel processing lanes!
+    serve(app, host='0.0.0.0', port=5000, threads=8)
