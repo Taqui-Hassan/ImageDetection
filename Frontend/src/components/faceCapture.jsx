@@ -9,9 +9,10 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import PersonIcon from '@mui/icons-material/Person';
 import KeyboardIcon from '@mui/icons-material/Keyboard'; 
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward'; // ➡️ New Icon
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import PhoneIcon from '@mui/icons-material/Phone'; // 📞 New Icon Added
 
-const API_URL = import.meta.env.VITE_API_URL; 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'; 
 
 export default function FaceCapture() {
     const webcamRef = useRef(null);
@@ -159,10 +160,11 @@ export default function FaceCapture() {
                         <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Confirm Identity</p>
                         <h2 className="text-3xl font-bold text-white mb-2">Welcome</h2>
                         <h2 className="text-3xl font-bold text-white mb-2">{detectedGuest.name} San</h2>
-                        <div className="bg-blue-600/20 text-blue-300 px-4 py-2 rounded-lg font-mono text-xl font-bold inline-block mb-8 border border-blue-500/30">
+                        <div className="bg-blue-600/20 text-blue-300 px-4 py-2 rounded-lg font-mono text-xl font-bold inline-block mb-6 border border-blue-500/30">
                             Seat: {detectedGuest.seat}
                         </div>
-                        <div className="flex gap-3">
+                        
+                        <div className="flex gap-3 mb-3">
                             <button onClick={handleReject} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
                                 <CancelIcon /> Retry
                             </button>
@@ -170,6 +172,15 @@ export default function FaceCapture() {
                                 <CheckCircleIcon /> Confirm
                             </button>
                         </div>
+
+                        {/* 🆕 NEW: WRONG PERSON BUTTON */}
+                        <button 
+                           onClick={() => setScanState("manual-input")}
+                           className="w-full flex items-center justify-center gap-2 bg-transparent border border-slate-600 text-slate-400 hover:text-white hover:border-white py-2 rounded-xl text-sm font-medium transition-all"
+                        >
+                          <PhoneIcon fontSize="small" /> Wrong person? Search by Phone
+                        </button>
+
                     </div>
                 </div>
             )}
