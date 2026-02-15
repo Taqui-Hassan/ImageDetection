@@ -200,7 +200,7 @@ export default function App() {
 
           </div>
 
-          <h1 className="text-2xl font-bold text-center text-white mb-1">Event Entry OS</h1>
+          <h1 className="text-2xl font-bold text-center text-white mb-1">MQFC EVENT OS</h1>
 
           <p className="text-slate-400 text-center text-sm mb-8">Authorized Personnel Only</p>
 
